@@ -26,10 +26,16 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="losses\FELoss.py">
+    <Compile Include="datasets\Cityscapes\Cityscapes.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="losses\__init__.py">
+    <Compile Include="datasets\Cityscapes\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\losses\FALoss.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\losses\__init__.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="main.py" />
@@ -53,11 +59,14 @@
     <InterpreterReference Include="CondaEnv|CondaEnv|env" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="datasets\" />
+    <Folder Include="datasets\Cityscapes\" />
     <Folder Include="models\" />
-    <Folder Include="losses\" />
+    <Folder Include="models\losses\" />
     <Folder Include="weights\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="datasets\.placeholder" />
     <Content Include="weights\.placeholder" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

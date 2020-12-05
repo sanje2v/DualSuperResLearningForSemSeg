@@ -80,5 +80,7 @@ class DSRLSS(t.nn.Module):
                 if self.stage == 3:
                     # Feature transform module for SISR
                     SISR_output = self.SISR_feature_transform(SISR_output)
+        else:
+            SISR_output = None
 
-        return (SSSR_output, SISR_output)
+        return SSSR_output, SISR_output

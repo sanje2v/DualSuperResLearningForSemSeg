@@ -5,12 +5,13 @@ import argparse
 import torch as t
 
 from models import DSRLSS
+from models.losses import FALoss
 from utils import *
 import settings
 
 
 
-def do_train(model, device, log_interval, stage, w1, w2,
+def do_train(model, device, stage, w1, w2,
              train_loader, optimizer, train_logger, PROGRESSBAR_FORMAT):
     model.train()
 
@@ -28,7 +29,7 @@ def do_train(model, device, log_interval, stage, w1, w2,
             SSSR_output, SISR_output = model.forward(train_input)
             CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, train_target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, train_target)) if stage > 1 else t.tensor(0., requires_grad=False)
-            FA_loss = (w2 * FELoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
+            FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
             loss = CE_loss + MSE_loss + FA_loss
 
             loss.backward()     # Backpropagate
@@ -55,13 +56,10 @@ def do_train(model, device, log_interval, stage, w1, w2,
             if stage == 2:
                 log_string.append("FA: {:.3f}".format(FA_loss))
             if stage > 1:
-                log_string.append("Total: {:3f}".format(loss))
+                log_string.append("Total: {:.3f}".format(loss))
             log_string = ', '.join(log_string)
             progressbar.set_postfix_str("Losses [{0}]".format(log_string))
             progressbar.update()
-
-            if (train_batch_idx + 1) % log_interval == 0:
-                pass
 
         # Show average losses before ending epoch
         log_string = []
@@ -72,14 +70,14 @@ def do_train(model, device, log_interval, stage, w1, w2,
         if stage == 2:
             log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
         if stage > 1:
-            log_string.append("Total: {:3f}".format(Avg_loss.avg))
+            log_string.append("Total: {:.3f}".format(Avg_loss.avg))
         log_string = ', '.join(log_string)
         tqdm.write(log_string)
 
         return CE_avg_loss, MSE_avg_loss, FA_avg_loss, Avg_loss
 
 
-def do_val(model, device, log_interval, stage, w1, w2,
+def do_val(model, device, stage, w1, w2,
            val_loader, val_logger, PROGRESSBAR_FORMAT):
     model.eval()
 
@@ -91,7 +89,7 @@ def do_val(model, device, log_interval, stage, w1, w2,
             FA_avg_loss = AverageMeter('FA Avg. Loss')
             Avg_loss = AverageMeter('Avg. Loss')
             
-            for val_batch_idx, (val_input, val_target) in enumerate():
+            for val_batch_idx, (val_input, val_target) in enumerate(progressbar):
                 val_input, val_target = getattr(val_input, device)(), getattr(val_target, device)()
 
                 SSSR_output, SISR_output = model.forward(val_input)
@@ -121,13 +119,10 @@ def do_val(model, device, log_interval, stage, w1, w2,
                 if stage == 2:
                     log_string.append("FA: {:.3f}".format(FA_loss))
                 if stage > 1:
-                    log_string.append("Total: {:3f}".format(loss))
+                    log_string.append("Total: {:.3f}".format(loss))
                 log_string = ', '.join(log_string)
                 progressbar.set_postfix_str("Losses [{0}]".format(log_string))
                 progressbar.update()
-
-                if (val_batch_idx + 1) % log_interval == 0:
-                    pass
 
             # Show average losses before ending epoch
             log_string = []
@@ -138,7 +133,7 @@ def do_val(model, device, log_interval, stage, w1, w2,
             if stage == 2:
                 log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
             if stage > 1:
-                log_string.append("Total: {:3f}".format(Avg_loss.avg))
+                log_string.append("Total: {:.3f}".format(Avg_loss.avg))
             log_string = ', '.join(log_string)
             tqdm.write(log_string)
 
@@ -148,7 +143,6 @@ def do_val(model, device, log_interval, stage, w1, w2,
 def main(train,
          eval_file=None,
          device='cpu',
-         log_interval=None,
          val_interval=None,
          batch_size=None,
          epochs=None,
@@ -203,7 +197,7 @@ def main(train,
             # Copy the model into 'device'
             model = getattr(model, device)()
 
-            # Start training and then validation in between intervals
+            # Start training and then validation after specific intervals
             log_string = "\n################################# Starting stage {:d} training #################################".format(stage)
             tqdm.write(log_string)
 
@@ -215,7 +209,7 @@ def main(train,
                 CE_train_avg_loss, \
                 MSE_train_avg_loss, \
                 FA_train_avg_loss, \
-                Avg_train_loss = do_train(model, device, log_interval, stage, w1, w2, train_loader, optimizer, train_logger, PROGRESSBAR_FORMAT)
+                Avg_train_loss = do_train(model, device, stage, w1, w2, train_loader, optimizer, train_logger, PROGRESSBAR_FORMAT)
 
                 # Log training losses for this epoch to TensorBoard
                 if stage in [1, 3]:
@@ -232,9 +226,9 @@ def main(train,
                     CE_val_avg_loss, \
                     MSE_val_avg_loss, \
                     FA_val_avg_loss, \
-                    Avg_val_loss = do_val(model, device, log_interval, stage, w1, w2, val_loader, optimizer, val_logger, PROGRESSBAR_FORMAT)
+                    Avg_val_loss = do_val(model, device, stage, w1, w2, val_loader, optimizer, val_logger, PROGRESSBAR_FORMAT)
 
-                    # Log training losses for this epoch to TensorBoard
+                    # Log validation losses for this epoch to TensorBoard
                     if stage in [1, 3]:
                         val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
                     if stage > 1:
@@ -250,15 +244,18 @@ def main(train,
         # Evaluation/Testing on input image mode
 
         # Module imports
-        import numpy as np
-        import imageio
+        from PIL import Image, ImageOps
 
         model.eval()
 
-        # Load image file, add 'batch' dimension and convert to tensor
-        input_ = t.from_numpy(np.expand_dims(imageio.imread(eval_file), axis=0))
+        # Copy the model into 'device'
+        model = getattr(model, device)()
+
+        # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
+        input_image = np.array(ImageOps.exif_transpose(Image.open(eval_file)).resize(settings.INPUT_SIZE))
+        input_image = np.transpose(np.expand_dims(input_image, axis=0), (0, 3, 1, 2))
         with t.no_grad():
-            SSSR_output, _ = model.forward(input_)
+            SSSR_output, _ = model.forward(t.tensor(input_image, dtype=t.float64, requires_grad=False))
 
 
 if __name__ == '__main__':
@@ -269,7 +266,6 @@ if __name__ == '__main__':
     parser.add_argument('--train', action='store_true', default=False, help="Train the model")
     parser.add_argument('--eval_file', type=str, help="Run evaluation on a image file using trained weights")
     parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
-    parser.add_argument('--log_interval', default=10, type=int, help="Batch intervals in a training after which to log to file")
     parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
     parser.add_argument('--batch_size', default=8, type=int, help="Batch size to use for training and testing")
     parser.add_argument('--epochs', type=int, help="Number of epochs to train")
@@ -284,9 +280,6 @@ if __name__ == '__main__':
 
     # Validate arguments according to mode
     if args.train:
-        if args.log_interval is None or not args.log_interval > 0:
-            raise argparse.ArgumentTypeError("'log_interval' should be greater than 0!")
-
         if args.val_interval is None or not args.val_interval > 0:
             raise argparse.ArgumentTypeError("'val_interval' should be greater than 0!")
 
@@ -317,7 +310,6 @@ if __name__ == '__main__':
     main(train=args.train,
          eval_file=args.eval_file,
          device=('cuda' if args.device == 'gpu' else args.device),
-         log_interval=args.log_interval,
          val_interval=args.val_interval,
          batch_size=args.batch_size,
          epochs=args.epochs,

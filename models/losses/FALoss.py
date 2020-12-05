@@ -1,7 +1,7 @@
 from torch.nn.modules.loss import _Loss
 
 
-class FELoss(_Loss):
+class FALoss(_Loss):
     __constants__ = ['reduction']
 
     def __init__(self, size_average=None, reduce=None, reduction='mean') -> None:
