@@ -10,115 +10,62 @@ from utils import *
 import settings
 
 
+def do_train_test(do_train: bool, model, device, stage, data_loader, w1=None, w2=None, optimizer=None):
+    with t.set_grad_enabled(mode=do_train):
+        model.train(mode=do_train)
 
-def do_train(model, device, stage, w1, w2,
-             train_loader, optimizer, train_logger, PROGRESSBAR_FORMAT):
-    model.train()
-
-    with tqdm(train_loader, desc='TRAINING', colour='green', position=0,
-              leave=False, bar_format=PROGRESSBAR_FORMAT) as progressbar:
-        CE_avg_loss = AverageMeter('CE Avg. Loss')
-        MSE_avg_loss = AverageMeter('MSE Avg. Loss')
-        FA_avg_loss = AverageMeter('FA Avg. Loss')
-        Avg_loss = AverageMeter('Avg. Loss')
-
-        for train_batch_idx, (train_input, train_target) in enumerate(progressbar):
-            train_input, train_target = getattr(train_input, device)(), getattr(train_target, device)()
-            optimizer.zero_grad()
-
-            SSSR_output, SISR_output = model.forward(train_input)
-            CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, train_target)
-            MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, train_target)) if stage > 1 else t.tensor(0., requires_grad=False)
-            FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
-            loss = CE_loss + MSE_loss + FA_loss
-
-            loss.backward()     # Backpropagate
-            optimizer.step()    # Increment global step
-
-            # Convert losses to float on CPU memory
-            CE_loss = CE_loss.item()
-            MSE_loss = MSE_loss.item()
-            FA_loss = FA_loss.item()
-            loss = loss.item()
-
-            # Compute averages for losses
-            CE_avg_loss.update(CE_Loss, train_input.size(0))
-            MSE_avg_loss.update(MSE_loss, train_input.size(0))
-            FA_avg_loss.update(FA_loss, train_input.size(0))
-            Avg_loss.update(loss, train_input.size(0))
-
-            # Add loss information to progress bar
-            log_string = []
-            if stage in [1, 3]:
-                log_string.append("CE: {:.3f}".format(CE_loss))
-            if stage > 1:
-                log_string.append("MSE: {:.3f}".format(MSE_loss))
-            if stage == 2:
-                log_string.append("FA: {:.3f}".format(FA_loss))
-            if stage > 1:
-                log_string.append("Total: {:.3f}".format(loss))
-            log_string = ', '.join(log_string)
-            progressbar.set_postfix_str("Losses [{0}]".format(log_string))
-            progressbar.update()
-
-        # Show average losses before ending epoch
-        log_string = []
-        if stage in [1, 3]:
-            log_string.append("CE: {:.3f}".format(CE_avg_loss.avg))
-        if stage > 1:
-            log_string.append("MSE: {:.3f}".format(MSE_avg_loss.avg))
-        if stage == 2:
-            log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
-        if stage > 1:
-            log_string.append("Total: {:.3f}".format(Avg_loss.avg))
-        log_string = ', '.join(log_string)
-        tqdm.write(log_string)
-
-        return CE_avg_loss, MSE_avg_loss, FA_avg_loss, Avg_loss
-
-
-def do_val(model, device, stage, w1, w2,
-           val_loader, val_logger, PROGRESSBAR_FORMAT):
-    model.eval()
-
-    with t.no_grad():
-        with tqdm(val_loader, desc='VALIDATION', colour='yellow', position=1,
-                  leave=False, bar_format=PROGRESSBAR_FORMAT) as progressbar:
+        with tqdm(data_loader,
+                  desc='TRAINING' if do_train else 'VALIDATION',
+                  colour='green' if do_train else 'yellow',
+                  position=0 if do_train else 1,
+                  leave=False, bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
             CE_avg_loss = AverageMeter('CE Avg. Loss')
             MSE_avg_loss = AverageMeter('MSE Avg. Loss')
             FA_avg_loss = AverageMeter('FA Avg. Loss')
             Avg_loss = AverageMeter('Avg. Loss')
-            
-            for val_batch_idx, (val_input, val_target) in enumerate(progressbar):
-                val_input, val_target = getattr(val_input, device)(), getattr(val_target, device)()
 
-                SSSR_output, SISR_output = model.forward(val_input)
-                CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, val_target)
-                MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, val_target)) if stage > 1 else t.tensor(0., requires_grad=False)
-                FA_loss = (w2 * FELoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
-                loss = CE_loss + MSE_loss + FA_loss
+            for batch_idx, (input_, target) in enumerate(progressbar):
+                input_, target = input_.to(device), target.to(device)
+                if do_train:
+                    optimizer.zero_grad()
+
+                SSSR_output, SISR_output = model.forward(input_)
+                CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
+                if stage > 1:
+                    MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, target)) if stage > 1 else t.tensor(0., requires_grad=False)
+                    if stage == 2:
+                        FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
+                    loss = CE_loss + \
+                            (MSE_loss if stage > 1 else t.torch(0., requires_grad=False)) + \
+                            (FA_loss if stage == 2 else t.torch(0., requires_grad=False))
+
+                if do_train:
+                    loss.backward()     # Backpropagate
+                    optimizer.step()    # Increment global step
 
                 # Convert losses to float on CPU memory
                 CE_loss = CE_loss.item()
-                MSE_loss = MSE_loss.item()
-                FA_loss = FA_loss.item()
-                loss = loss.item()
+                if stage > 1:
+                    MSE_loss = MSE_loss.item()
+                    if stage == 2:
+                        FA_loss = FA_loss.item()
+                    loss = loss.item()
 
                 # Compute averages for losses
-                CE_avg_loss.update(CE_Loss, val_input.size(0))
-                MSE_avg_loss.update(MSE_loss, val_input.size(0))
-                FA_avg_loss.update(FA_loss, val_input.size(0))
-                Avg_loss.update(loss, val_input.size(0))
+                CE_avg_loss.update(CE_Loss, input_.size(0))
+                if stage > 1:
+                    MSE_avg_loss.update(MSE_loss, input_.size(0))
+                    if stage == 2:
+                        FA_avg_loss.update(FA_loss, input_.size(0))
+                    Avg_loss.update(loss, input_.size(0))
 
                 # Add loss information to progress bar
                 log_string = []
-                if stage in [1, 3]:
-                    log_string.append("CE: {:.3f}".format(CE_loss))
+                log_string.append("CE: {:.3f}".format(CE_loss))
                 if stage > 1:
                     log_string.append("MSE: {:.3f}".format(MSE_loss))
-                if stage == 2:
-                    log_string.append("FA: {:.3f}".format(FA_loss))
-                if stage > 1:
+                    if stage == 2:
+                        log_string.append("FA: {:.3f}".format(FA_loss))
                     log_string.append("Total: {:.3f}".format(loss))
                 log_string = ', '.join(log_string)
                 progressbar.set_postfix_str("Losses [{0}]".format(log_string))
@@ -126,13 +73,11 @@ def do_val(model, device, stage, w1, w2,
 
             # Show average losses before ending epoch
             log_string = []
-            if stage in [1, 3]:
-                log_string.append("CE: {:.3f}".format(CE_avg_loss.avg))
+            log_string.append("CE: {:.3f}".format(CE_avg_loss.avg))
             if stage > 1:
                 log_string.append("MSE: {:.3f}".format(MSE_avg_loss.avg))
-            if stage == 2:
-                log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
-            if stage > 1:
+                if stage == 2:
+                    log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
                 log_string.append("Total: {:.3f}".format(Avg_loss.avg))
             log_string = ', '.join(log_string)
             tqdm.write(log_string)
@@ -142,7 +87,7 @@ def do_val(model, device, stage, w1, w2,
 
 def main(train,
          eval_file=None,
-         device='cpu',
+         device=None,
          val_interval=None,
          batch_size=None,
          epochs=None,
@@ -162,25 +107,26 @@ def main(train,
         # Module imports
         import logging
         from tqdm.auto import tqdm
+        import torchvision as tv
         from torch.utils import tensorboard as tb
 
-        from losses import FELoss
-
-        # Settings
-        PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
-        WEIGHTS_DIR = 'weights'
-        LOGS_DIR = 'logs'
+        from models.losses import FELoss
 
         # Prepare data
-        train_loader = None
-        val_loader = None
+        os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
+        if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
+            tqdm.write("Cityscapes dataset was not found under '{0}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR))
+            return
+
+        train_loader = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR, split='train', mode='fine', target_type='semantic')
+        val_loader = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR, split='val', mode='fine', target_type='semantic')
         
         # Make sure proper directories exist
-        os.makedirs(os.path.join(WEIGHTS_DIR, "stage{:d}".format(stage)))
-        os.makedirs(LOGS_DIR, exist_ok=True)
+        os.makedirs(os.path.join(settings.WEIGHTS_DIR, "stage{:d}".format(stage)))
+        os.makedirs(settings.LOGS_DIR, exist_ok=True)
 
-        with tb.SummaryWriter(log_dir=os.path.join(LOGS_DIR, "stage{:d}".format(stage), "train")) as train_logger, \
-             tb.SummaryWriter(log_dir=os.path.join(LOGS_DIR, "stage{:d}".format(stage), "val")) as val_logger:
+        with tb.SummaryWriter(log_dir=os.path.join(settings.LOGS_DIR, "stage{:d}".format(stage), "train")) as train_logger, \
+             tb.SummaryWriter(log_dir=os.path.join(settings.LOGS_DIR, "stage{:d}".format(stage), "val")) as val_logger:
 
             # Training optimizer and schedular
             optimizer = t.optim.SGD(model.parameters(),
@@ -190,12 +136,13 @@ def main(train,
             scheduler = t.optim.lr_scheduler.ExponentialLR(optimizer, gamma=poly_power)
 
             # Load weights from previous stages, if any
-            if stage == 3:
-                model.load_state_dict(t.load(os.path.join(WEIGHTS_DIR, "stage1")))
-                model.load_state_dict(t.load(os.path.join(WEIGHTS_DIR, "stage2")))
+            if stage > 1:
+                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR, "stage1")))
+                if stage == 3:
+                    model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR, "stage2")))
 
             # Copy the model into 'device'
-            model = getattr(model, device)()
+            model = model.to(device)
 
             # Start training and then validation after specific intervals
             log_string = "\n################################# Starting stage {:d} training #################################".format(stage)
@@ -209,7 +156,14 @@ def main(train,
                 CE_train_avg_loss, \
                 MSE_train_avg_loss, \
                 FA_train_avg_loss, \
-                Avg_train_loss = do_train(model, device, stage, w1, w2, train_loader, optimizer, train_logger, PROGRESSBAR_FORMAT)
+                Avg_train_loss = do_train_test(do_train=True,
+                                               model=model,
+                                               device=device,
+                                               stage=stage,
+                                               data_loader=train_loader,
+                                               w1=w1,
+                                               w2=w2,
+                                               optimizer=optimizer)
 
                 # Log training losses for this epoch to TensorBoard
                 if stage in [1, 3]:
@@ -226,7 +180,11 @@ def main(train,
                     CE_val_avg_loss, \
                     MSE_val_avg_loss, \
                     FA_val_avg_loss, \
-                    Avg_val_loss = do_val(model, device, stage, w1, w2, val_loader, optimizer, val_logger, PROGRESSBAR_FORMAT)
+                    Avg_val_loss = do_train_test(do_train=False,
+                                                 model=model,
+                                                 device=device,
+                                                 stage=stage,
+                                                 data_loader=val_loader)
 
                     # Log validation losses for this epoch to TensorBoard
                     if stage in [1, 3]:
@@ -244,23 +202,45 @@ def main(train,
         # Evaluation/Testing on input image mode
 
         # Module imports
+        import numpy as np
         from PIL import Image, ImageOps
 
         model.eval()
 
         # Copy the model into 'device'
-        model = getattr(model, device)()
+        model = model.to(device)
 
         # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
-        input_image = np.array(ImageOps.exif_transpose(Image.open(eval_file)).resize(settings.INPUT_SIZE))
-        input_image = np.transpose(np.expand_dims(input_image, axis=0), (0, 3, 1, 2))
+        input_image = ImageOps.exif_transpose(Image.open(eval_file)).resize(settings.INPUT_SIZE).convert('RGB')
+
         with t.no_grad():
-            SSSR_output, _ = model.forward(t.tensor(input_image, dtype=t.float64, requires_grad=False))
+            SSSR_output, _ = model.forward(t.tensor(np.transpose(np.expand_dims(np.array(input_image, dtype=np.float32), axis=0), (0, 3, 1, 2)),
+                                                    device=device, requires_grad=False))  # Add batch dimension and change to (B, C, H, W)
+            SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory
+
+            # Prepare output image consisting of model input and segmentation image side-by-side
+            output_image = np.zeros((settings.INPUT_SIZE[0] * 2, settings.INPUT_SIZE[1], 3), dtype=np.uint8)
+
+            for x in range(settings.INPUT_SIZE[1]):
+                for y in range(settings.INPUT_SIZE[0]):
+                    output_image[x, y, :] = input_image[x, y, :]
+                    output_image[x + settings.INPUT_SIZE[1], y + settings.INPUT_SIZE[0], :] = getRGBColorFromClass(np.argmax(SSSR_output, axis=2))
+
+            # Save and show output
+            os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
+            output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(eval_file))[0], 'png')
+            Image.fromarray(output_image).save(output_image_filename, format='PNG')
+            tqdm.write("Output image saved in: {0:s}".format(output_image_filename))
+
+            Image.fromarray(output_image, mode='RGB').show(title='Segmentation output')
+            
 
 
 if __name__ == '__main__':
-    assert check_version(sys.version_info, major=3, minor=7), "This program needs at least Python 3.7 interpreter."
-    assert check_version(t.__version__, major=1, minor=7), "This program needs at least PyTorch 1.7."
+    assert check_version(sys.version_info,*settings.MIN_PYTHON_VERSION), \
+        "This program needs at least Python {0:d}.{1:d} interpreter.".format(*settings.MIN_PYTHON_VERSION)
+    assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
+        "This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION)
 
     parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Segmantic Segmentation' CVPR 2020 paper.")
     parser.add_argument('--train', action='store_true', default=False, help="Train the model")
@@ -309,7 +289,7 @@ if __name__ == '__main__':
 
     main(train=args.train,
          eval_file=args.eval_file,
-         device=('cuda' if args.device == 'gpu' else args.device),
+         device=t.device('cuda' if args.device == 'gpu' else args.device),
          val_interval=args.val_interval,
          batch_size=args.batch_size,
          epochs=args.epochs,

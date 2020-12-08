@@ -63,6 +63,7 @@
     <Folder Include="datasets\Cityscapes\" />
     <Folder Include="models\" />
     <Folder Include="models\losses\" />
+    <Folder Include="outputs\" />
     <Folder Include="weights\" />
   </ItemGroup>
   <ItemGroup>

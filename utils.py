@@ -6,6 +6,9 @@ def check_version(version, major, minor):
     return version[0] >= major and version[1] >= minor
 
 
+def getRGBColorFromClass(class_idx):
+    pass
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self, name, fmt=':f'):
