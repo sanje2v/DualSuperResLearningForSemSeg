@@ -1,1 +1,1 @@
-from .FELoss import *
+from .FALoss import *

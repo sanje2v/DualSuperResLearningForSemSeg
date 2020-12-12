@@ -2,7 +2,7 @@ import sys
 import os
 import os.path
 import argparse
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm as tqdm
 import torch as t
 
 from models import DSRLSS
@@ -12,10 +12,10 @@ import settings
 
 
 def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=None, optimizer=None):
-    with t.set_grad_enabled(mode=do_train):
-        model.train(mode=do_train)
+    model.train(mode=do_train)
 
-        with tqdm(data_loader,
+    with t.set_grad_enabled(mode=do_train):
+        with tqdm(total=len(data_loader),
                   desc='TRAINING' if do_train else 'VALIDATION',
                   colour='green' if do_train else 'yellow',
                   position=0 if do_train else 1,
@@ -25,7 +25,7 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
             FA_avg_loss = AverageMeter('FA Avg. Loss')
             Avg_loss = AverageMeter('Avg. Loss')
 
-            for batch_idx, (input_, target) in enumerate(progressbar):
+            for (input_, target) in data_loader:
                 input_, target = input_.to(device), target.to(device)
                 if do_train:
                     optimizer.zero_grad()
@@ -89,6 +89,7 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
 def main(train,
          test_file=None,
          device=None,
+         num_workers=None,
          val_interval=None,
          batch_size=None,
          epochs=None,
@@ -98,9 +99,10 @@ def main(train,
          poly_power=None,
          stage=None,
          w1=None,
-         w2=None):
+         w2=None,
+         description=None):
     # Create model according to stage
-    model = DSRLSS(train, stage)
+    model = DSRLSS(stage)
 
     if train:
         # Training and Validation on dataset mode
@@ -109,22 +111,66 @@ def main(train,
         import torchvision as tv
         from torch.utils import tensorboard as tb
 
-        # Prepare data
+        # Prepare data from CityScapes dataset
         os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
             tqdm.write("Cityscapes dataset was not found under '{0:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR))
             return
 
-        train_loader = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR, split='train', mode='fine', target_type='semantic')
-        val_loader = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR, split='val', mode='fine', target_type='semantic')
+        #input_transforms = tv.transforms.Compose([tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
+        #                                          tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)])
+        #joint_transforms = tv.transforms.Compose([tv.transforms.PILToTensor(),
+        #                                          tv.transforms.RandomHorizontalFlip(),
+        #                                          tv.transforms.RandomResizedCrop(size=DSRLSS.MODEL_INPUT_SIZE)])
+        train_input_transforms = tv.transforms.Compose([tv.transforms.ToTensor(),
+                                                        tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
+                                                        tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)])
+        val_input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
+                                                     tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD)])
+        target_transforms = tv.transforms.Compose([tv.transforms.ToTensor()])
+        train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                               split='train',
+                                               mode='fine',
+                                               target_type='semantic',
+                                               transform=train_input_transforms,
+                                               target_transform=target_transforms,
+                                               transforms=None)
+        train_loader = t.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                             split='val',
+                                             mode='fine',
+                                             target_type='semantic',
+                                             transform=val_input_transform,
+                                             target_transform=target_transforms,
+                                             transforms=None)
+        val_loader = t.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         
-        # Make sure proper directories exist
-        os.makedirs(settings.WEIGHTS_DIR.format(stage=stage))
-        os.makedirs(settings.LOGS_DIR.format(stage=stage, mode='train'), exist_ok=True)
-        os.makedirs(settings.LOGS_DIR.format(stage=stage, mode='val'), exist_ok=True)
+        # Make sure proper log directories exist
+        train_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='train')
+        val_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='val')
+        os.makedirs(train_logs_dir, exist_ok=True)
+        os.makedirs(val_logs_dir, exist_ok=True)
 
-        with tb.SummaryWriter(log_dir=settings.LOGS_DIR.format(stage=stage, mode='train')) as train_logger, \
-             tb.SummaryWriter(log_dir=settings.LOGS_DIR.format(stage=stage, mode='val')) as val_logger:
+        # Write training parameters provided to params.txt log file
+        with open(os.path.join(train_logs_dir, 'params.txt'), mode='w') as params_file:
+            params_file.writelines("Device: {:s}".format(str(device)))
+            params_file.writelines("Validation interval: {:d}".format(val_interval))
+            params_file.writelines("Batch size: {:d}".format(batch_size))
+            params_file.writelines("Epochs: {:d}".format(epochs))
+            params_file.writelines("Learning rate: {:f}".format(learning_rate))
+            params_file.writelines("Momentum: {:f}".format(momentum))
+            params_file.writelines("Weight decay: {:f}".format(weight_decay))
+            params_file.writelines("Poly power: {:f}".format(poly_power))
+            params_file.writelines("Stage: {:d}".format(stage))
+            if stage > 1:
+                params_file.writelines("Loss Weight 1: {:f}".format(w1))
+
+                if stage == 2:
+                    params_file.writelines("Loss Weight 2: {:f}".format(w2))
+            params_file.writelines("Description: {:s}".format(description))
+
+        with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger, \
+             tb.SummaryWriter(log_dir=val_logs_dir) as val_logger:
 
             # Training optimizer and schedular
             optimizer = t.optim.SGD(model.parameters(),
@@ -154,14 +200,14 @@ def main(train,
                 CE_train_avg_loss, \
                 MSE_train_avg_loss, \
                 FA_train_avg_loss, \
-                Avg_train_loss = do_train_test(do_train=True,
-                                               model=model,
-                                               device=device,
-                                               stage=stage,
-                                               data_loader=train_loader,
-                                               w1=w1,
-                                               w2=w2,
-                                               optimizer=optimizer)
+                Avg_train_loss = do_train_val(do_train=True,
+                                              model=model,
+                                              device=device,
+                                              stage=stage,
+                                              data_loader=train_loader,
+                                              w1=w1,
+                                              w2=w2,
+                                              optimizer=optimizer)
 
                 # Log training losses for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss.avg, epoch)
@@ -194,6 +240,7 @@ def main(train,
                         val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss.avg, epoch)
 
             # Save training weights for this stage
+            os.makedirs(settings.WEIGHTS_DIR.format(stage=stage))
             t.save(model.state_dict(), os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE))
 
             log_string = "\n################################# Stage {:d} training ENDED #################################".format(stage)
@@ -244,7 +291,7 @@ def main(train,
 
 
 if __name__ == '__main__':
-    assert check_version(sys.version_info,*settings.MIN_PYTHON_VERSION), \
+    assert check_version(sys.version_info, *settings.MIN_PYTHON_VERSION), \
         "This program needs at least Python {0:d}.{1:d} interpreter.".format(*settings.MIN_PYTHON_VERSION)
     assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
         "This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION)
@@ -253,6 +300,7 @@ if __name__ == '__main__':
     parser.add_argument('--train', action='store_true', default=False, help="Train the model")
     parser.add_argument('--test_file', type=str, help="Run evaluation on a image file using trained weights")
     parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
+    parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
     parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
     parser.add_argument('--batch_size', default=8, type=int, help="Batch size to use for training and testing")
     parser.add_argument('--epochs', type=int, help="Number of epochs to train")
@@ -260,13 +308,17 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
     parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
     parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
-    parser.add_argument('--stage', type=int, choices=[1, 2, 3], help="0: Train SSSR only\n1: Train SISR only\n2: Train SSSR and SISR jointly")
+    parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
     parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
     parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
+    parser.add_argument('--description', type=str, default='', help="Description text to save with params.txt")
     args = parser.parse_args()
 
     # Validate arguments according to mode
     if args.train:
+        if not args.num_workers >= 0:
+            raise argparse.ArgumentTypeError("'num_workers' should be greater than or equal to 0!")
+
         if not args.val_interval > 0:
             raise argparse.ArgumentTypeError("'val_interval' should be greater than 0!")
 
@@ -301,6 +353,7 @@ if __name__ == '__main__':
     main(train=args.train,
          test_file=args.test_file,
          device=t.device('cuda' if args.device == 'gpu' else args.device),
+         num_workers=args.num_workers,
          val_interval=args.val_interval,
          batch_size=args.batch_size,
          epochs=args.epochs,
@@ -310,4 +363,5 @@ if __name__ == '__main__':
          poly_power=args.poly_power,
          stage=args.stage,
          w1=args.w1,
-         w2=args.w2)
+         w2=args.w2,
+         description=args.description)
