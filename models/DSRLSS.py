@@ -4,6 +4,7 @@ import torchvision as tv
 
 class DSRLSS(t.nn.Module):
     MODEL_INPUT_SIZE = (512, 1024)
+    MODEL_OUTPUT_SIZE = (1024, 2048)
 
     @staticmethod
     def __define_feature_extractor():

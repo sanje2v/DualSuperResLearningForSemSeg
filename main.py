@@ -7,6 +7,7 @@ import torch as t
 
 from models import DSRLSS
 from models.losses import FALoss
+from models.transforms import DuplicateToScaledImageTransform
 from utils import *
 import settings
 
@@ -25,15 +26,15 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
             FA_avg_loss = AverageMeter('FA Avg. Loss')
             Avg_loss = AverageMeter('Avg. Loss')
 
-            for (input_, target) in data_loader:
-                input_, target = input_.to(device), target.to(device)
+            for ((input_1, input_2), target) in data_loader:  # NOTE: 'input_1' is scaled image, 'input_2' is original size
+                input_1, input_2, target = input_1.to(device), (None if stage == 1 else input_2.to(device)), target.to(device)
                 if do_train:
                     optimizer.zero_grad()
 
-                SSSR_output, SISR_output = model.forward(input_)
+                SSSR_output, SISR_output = model.forward(input_1)
                 CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
                 if stage > 1:
-                    MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, target)) if stage > 1 else t.tensor(0., requires_grad=False)
+                    MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_2)) if stage > 1 else t.tensor(0., requires_grad=False)
                     if stage == 3:
                         FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
                     loss = CE_loss + \
@@ -124,9 +125,11 @@ def main(train,
         #                                          tv.transforms.RandomResizedCrop(size=DSRLSS.MODEL_INPUT_SIZE)])
         train_input_transforms = tv.transforms.Compose([tv.transforms.ToTensor(),
                                                         tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
-                                                        tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)])
+                                                        tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                                                        DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
         val_input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                     tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD)])
+                                                     tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
+                                                     DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
         target_transforms = tv.transforms.Compose([tv.transforms.ToTensor()])
         train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                                split='train',

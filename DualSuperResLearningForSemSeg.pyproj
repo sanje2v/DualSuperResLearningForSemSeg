@@ -16,6 +16,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <CommandLineArguments>--train --stage 1 --epochs 10 --description "Something here" --num_workers=0</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -42,6 +43,12 @@
     <Compile Include="models\DSRLSS.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\__init__.py">
       <SubType>Code</SubType>
     </Compile>
@@ -63,6 +70,7 @@
     <Folder Include="datasets\Cityscapes\" />
     <Folder Include="models\" />
     <Folder Include="models\losses\" />
+    <Folder Include="models\transforms\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />
   </ItemGroup>
