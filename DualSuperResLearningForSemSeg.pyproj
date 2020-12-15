@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>46aa911d-f2c5-4be4-a319-11599f9e7db8</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>main.py</StartupFile>
+    <StartupFile>test.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>--train --stage 1 --epochs 10 --description "Something here" --num_workers=0</CommandLineArguments>
+    <CommandLineArguments>--train --stage 1 --epochs 10 --description "Something here" --batch_size 2 --num_workers 0</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
@@ -27,7 +27,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="datasets\Cityscapes\Cityscapes.py">
+    <Compile Include="datasets\Cityscapes\settings.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="datasets\Cityscapes\__init__.py">
@@ -43,7 +43,19 @@
     <Compile Include="models\DSRLSS.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\modules\ASPP.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\modules\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\ResNet101.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\PILToClassLabelLongTensor.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\__init__.py">
@@ -70,12 +82,12 @@
     <Folder Include="datasets\Cityscapes\" />
     <Folder Include="models\" />
     <Folder Include="models\losses\" />
+    <Folder Include="models\modules\" />
     <Folder Include="models\transforms\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="datasets\.placeholder" />
     <Content Include="weights\.placeholder" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

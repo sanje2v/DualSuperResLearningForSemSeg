@@ -7,9 +7,10 @@ import torch as t
 
 from models import DSRLSS
 from models.losses import FALoss
-from models.transforms import DuplicateToScaledImageTransform
+from models.transforms import DuplicateToScaledImageTransform, PILToClassLabelLongTensor
 from utils import *
 import settings
+from datasets.Cityscapes import settings as cityscapes_settings
 
 
 def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=None, optimizer=None):
@@ -33,13 +34,9 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
 
                 SSSR_output, SISR_output = model.forward(input_1)
                 CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
-                if stage > 1:
-                    MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_2)) if stage > 1 else t.tensor(0., requires_grad=False)
-                    if stage == 3:
-                        FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
-                    loss = CE_loss + \
-                            (MSE_loss if stage > 1 else t.torch(0., requires_grad=False)) + \
-                            (FA_loss if stage == 2 else t.torch(0., requires_grad=False))
+                MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_2)) if stage > 1 else t.tensor(0., requires_grad=False)
+                FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
+                loss = CE_loss + MSE_loss + FA_loss
 
                 if do_train:
                     loss.backward()     # Backpropagate
@@ -124,13 +121,13 @@ def main(train,
         #                                          tv.transforms.RandomHorizontalFlip(),
         #                                          tv.transforms.RandomResizedCrop(size=DSRLSS.MODEL_INPUT_SIZE)])
         train_input_transforms = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                        tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
+                                                        tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
                                                         tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
                                                         DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
         val_input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                     tv.transforms.Normalize(mean=settings.CITYSCAPES_DATASET_MEAN, std=settings.CITYSCAPES_DATASET_STD),
+                                                     tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
                                                      DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
-        target_transforms = tv.transforms.Compose([tv.transforms.ToTensor()])
+        target_transforms = tv.transforms.Compose([PILToClassLabelLongTensor()])
         train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                                split='train',
                                                mode='fine',
@@ -245,6 +242,7 @@ def main(train,
             # Save training weights for this stage
             os.makedirs(settings.WEIGHTS_DIR.format(stage=stage))
             t.save(model.state_dict(), os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE))
+            train_logger.add_text("INFO: Training was completed successfully and weights saved.")
 
             log_string = "\n################################# Stage {:d} training ENDED #################################".format(stage)
             tqdm.write(log_string)
@@ -305,8 +303,8 @@ if __name__ == '__main__':
     parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
     parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
     parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
-    parser.add_argument('--batch_size', default=8, type=int, help="Batch size to use for training and testing")
-    parser.add_argument('--epochs', type=int, help="Number of epochs to train")
+    parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
+    parser.add_argument('--epochs', type=int, required=True, help="Number of epochs to train")
     parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
     parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
     parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
@@ -343,8 +341,8 @@ if __name__ == '__main__':
         if not args.poly_power > 0.:
             raise argparse.ArgumentTypeError("'poly_power' should be greater than 0!")
     else:
-        if args.test_file is not None:
-            raise argparse.ArgumentTypeError("'test_file' is required when 'train' parameter is false!")
+        if args.test_file is None:
+            raise argparse.ArgumentTypeError("'test_file' is required when '--train' parameter is not specified!")
 
         if not os.path.isfile(args.test_file):
             raise argparse.ArgumentTypeError("File specified in 'test_file' parameter doesn't exists!")

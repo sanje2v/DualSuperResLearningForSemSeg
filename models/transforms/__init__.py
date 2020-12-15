@@ -1,1 +1,2 @@
-from .DuplicateToScaledImageTransform import *
+from .DuplicateToScaledImageTransform import DuplicateToScaledImageTransform
+from .PILToClassLabelLongTensor import PILToClassLabelLongTensor
