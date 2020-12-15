@@ -13,7 +13,7 @@ import settings
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
-def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=None, optimizer=None):
+def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, w1=None, w2=None, optimizer=None):
     model.train(mode=do_train)
 
     with t.set_grad_enabled(mode=do_train):
@@ -42,28 +42,26 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
                     loss.backward()     # Backpropagate
                     optimizer.step()    # Increment global step
 
-                # Convert losses to float on CPU memory
+                # Convert loss tensors to float on CPU memory
                 CE_loss = CE_loss.item()
-                if stage > 1:
-                    MSE_loss = MSE_loss.item()
-                    if stage == 3:
-                        FA_loss = FA_loss.item()
-                    loss = loss.item()
+                MSE_loss = MSE_loss.item() if stage > 1 else None
+                FA_loss = FA_loss.item() if stage > 2 else None
+                loss = loss.item()
 
                 # Compute averages for losses
-                CE_avg_loss.update(CE_Loss, input_.size(0))
+                CE_avg_loss.update(CE_loss, batch_size)
                 if stage > 1:
-                    MSE_avg_loss.update(MSE_loss, input_.size(0))
-                    if stage == 2:
-                        FA_avg_loss.update(FA_loss, input_.size(0))
-                    Avg_loss.update(loss, input_.size(0))
+                    MSE_avg_loss.update(MSE_loss, batch_size)
+                    if stage > 2:
+                        FA_avg_loss.update(FA_loss, batch_size)
+                    Avg_loss.update(loss, batch_size)
 
                 # Add loss information to progress bar
                 log_string = []
                 log_string.append("CE: {:.3f}".format(CE_loss))
                 if stage > 1:
                     log_string.append("MSE: {:.3f}".format(MSE_loss))
-                    if stage == 3:
+                    if stage > 2:
                         log_string.append("FA: {:.3f}".format(FA_loss))
                     log_string.append("Total: {:.3f}".format(loss))
                 log_string = ', '.join(log_string)
@@ -72,12 +70,12 @@ def do_train_val(do_train: bool, model, device, stage, data_loader, w1=None, w2=
 
             # Show average losses before ending epoch
             log_string = []
-            log_string.append("CE: {:.3f}".format(CE_avg_loss.avg))
+            log_string.append("Avg. CE: {:.3f}".format(CE_avg_loss.avg))
             if stage > 1:
-                log_string.append("MSE: {:.3f}".format(MSE_avg_loss.avg))
-                if stage == 3:
-                    log_string.append("FA: {:.3f}".format(FA_avg_loss.avg))
-                log_string.append("Total: {:.3f}".format(Avg_loss.avg))
+                log_string.append("Avg. MSE: {:.3f}".format(MSE_avg_loss.avg))
+                if stage > 2:
+                    log_string.append("Avg. FA: {:.3f}".format(FA_avg_loss.avg))
+                log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
             log_string = ', '.join(log_string)
             tqdm.write(log_string)
 
@@ -203,6 +201,7 @@ def main(train,
                 Avg_train_loss = do_train_val(do_train=True,
                                               model=model,
                                               device=device,
+                                              batch_size=batch_size,
                                               stage=stage,
                                               data_loader=train_loader,
                                               w1=w1,
@@ -228,6 +227,7 @@ def main(train,
                     Avg_val_loss = do_train_test(do_train=False,
                                                  model=model,
                                                  device=device,
+                                                 batch_size=batch_size,
                                                  stage=stage,
                                                  data_loader=val_loader)
 
@@ -304,7 +304,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
     parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
     parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
-    parser.add_argument('--epochs', type=int, required=True, help="Number of epochs to train")
+    parser.add_argument('--epochs', type=int, help="Number of epochs to train")
     parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
     parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
     parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
@@ -318,34 +318,34 @@ if __name__ == '__main__':
     # Validate arguments according to mode
     if args.train:
         if not args.num_workers >= 0:
-            raise argparse.ArgumentTypeError("'num_workers' should be greater than or equal to 0!")
+            raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
 
         if not args.val_interval > 0:
-            raise argparse.ArgumentTypeError("'val_interval' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--val_interval' should be greater than 0!")
 
         if not args.batch_size > 0:
-            raise argparse.ArgumentTypeError("'batch_size' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
-        if not args.epochs > 0:
-            raise argparse.ArgumentTypeError("'epochs' should be greater than 0!")
+        if args.epochs is None or not args.epochs > 0:
+            raise argparse.ArgumentTypeError("'--epochs' should be provided and it must be greater than 0!")
 
         if not args.learning_rate > 0.:
-            raise argparse.ArgumentTypeError("'learning_rate' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--learning_rate' should be greater than 0!")
 
         if not args.momentum > 0.:
-            raise argparse.ArgumentTypeError("'momentum' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--momentum' should be greater than 0!")
 
         if not args.weight_decay > 0.:
-            raise argparse.ArgumentTypeError("'weight_decay' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--weight_decay' should be greater than 0!")
 
         if not args.poly_power > 0.:
-            raise argparse.ArgumentTypeError("'poly_power' should be greater than 0!")
+            raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
     else:
         if args.test_file is None:
-            raise argparse.ArgumentTypeError("'test_file' is required when '--train' parameter is not specified!")
+            raise argparse.ArgumentTypeError("'--test_file' is required when '--train' parameter is not specified!")
 
         if not os.path.isfile(args.test_file):
-            raise argparse.ArgumentTypeError("File specified in 'test_file' parameter doesn't exists!")
+            raise argparse.ArgumentTypeError("File specified in '--test_file' parameter doesn't exists!")
 
         if not os.path.isfile(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE):
             raise argparse.ArgumentTypeError("Weight file '{0:s}' for stage{1:d} was not found!"\
