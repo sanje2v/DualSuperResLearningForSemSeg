@@ -500,3 +500,5 @@ MigrationBackup/
 ############ ADDED
 datasets/Cityscapes/data/
 outputs/
+weights/
+logs/

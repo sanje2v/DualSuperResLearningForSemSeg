@@ -38,8 +38,9 @@ class DSRLSS(t.nn.Module):
                                         t.nn.ReLU(inplace=True),
                                         t.nn.Dropout(p=0.1)),
             'cls_conv': t.nn.Conv2d(in_channels=256, out_channels=cityscapes_settings.DATASET_NUM_CLASSES, kernel_size=1),
-            #'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
-            'upsample8_pred': t.nn.Sequential(t.nn.ConvTranspose2d(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,     # Each ConvTranspose scales 2x
+            # NOTE: Replaced 'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
+            # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 16 times.
+            'upsample8_pred': t.nn.Sequential(t.nn.ConvTranspose2d(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
                                                                    out_channels=cityscapes_settings.DATASET_NUM_CLASSES,
                                                                    kernel_size=2,
                                                                    stride=2,

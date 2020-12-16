@@ -10,6 +10,7 @@ MIN_PYTHON_VERSION = version_tuple(major=3, minor=7)
 MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
+PARAMS_FILE = 'params.txt'
 WEIGHTS_DIR = os.path.join('weights', 'stage{stage}')
 WEIGHTS_FILE  = 'weights.pl'
 LOGS_DIR = os.path.join('logs', 'stage{stage}', '{mode}')
