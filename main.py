@@ -266,7 +266,9 @@ def main(train,
         model = model.to(device)
 
         # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
-        with ImageOps.exif_transpose(Image.open(test_file)).convert('RGB').resize(swapTupleValues(DSRLSS.MODEL_OUTPUT_SIZE)) as input_image:
+        with ImageOps.exif_transpose(Image.open(test_file))\
+                .convert('RGB')\
+                .resize(swapTupleValues(DSRLSS.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
             with t.no_grad():
                 input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
                                                          tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
@@ -291,7 +293,7 @@ def main(train,
             output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(test_file))[0] + '.png')
 
             output_image.save(output_image_filename, format='PNG')
-            tqdm.write("Output image saved as: {0:s}".format(output_image_filename))
+            tqdm.write("Output image saved as: {:s}".format(output_image_filename))
 
             output_image.show(title='Segmentation output')
         
