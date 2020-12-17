@@ -9,6 +9,8 @@ LABEL_MAPPING_DICT = \
     20: 8, 21: 9, 22: 10, 23: 11, 24: 12, 25: 13, 26: 14, 27: 15,
     28: 16, 29: 0, 30: 0, 31: 17, 32: 18, 33: 19
 }
+assert min(LABEL_MAPPING_DICT.values()) == 0 and max(LABEL_MAPPING_DICT.values()) == (DATASET_NUM_CLASSES - 1), \
+    "'LABEL_MAPPING_DICT' must contain mappings starting from 0 to {:d}!".format(DATASET_NUM_CLASSES - 1)
 # Provides colors to each class to visualize segmentation maps
 CLASS_RGB_COLOR = \
 [
@@ -17,4 +19,5 @@ CLASS_RGB_COLOR = \
     (70, 130, 180), (220, 20, 60), (255, 0, 0), (0, 0, 142), (0, 0, 70), (0, 60, 100), \
     (0, 80, 100), (0, 0, 230), (119, 11, 32)
 ]
-assert len(CLASS_RGB_COLOR) == DATASET_NUM_CLASSES, "'CLASS_RGB_COLOR' needs {:d} color values!".format(DATASET_NUM_CLASSES)
+assert len(CLASS_RGB_COLOR) == DATASET_NUM_CLASSES and all([len(x) == 3 for x in CLASS_RGB_COLOR]), \
+    "'CLASS_RGB_COLOR' needs {:d} color values!".format(DATASET_NUM_CLASSES)

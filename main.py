@@ -1,22 +1,27 @@
 import sys
 import os
 import os.path
+import shutil
 import argparse
 from tqdm.auto import tqdm as tqdm
+import numpy as np
 import torch as t
 import torchvision as tv
 from torch.utils import tensorboard as tb
 from datetime import datetime
+from PIL import Image, ImageOps
 
 from models import DSRLSS
+from models.schedulers import PolynomialLR
 from models.losses import FALoss
 from models.transforms import DuplicateToScaledImageTransform, PILToClassLabelLongTensor
 from utils import *
 import settings
 from datasets.Cityscapes import settings as cityscapes_settings
+        
 
 
-def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, w1=None, w2=None, optimizer=None):
+def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, w1=None, w2=None, optimizer=None, scheduler=None):
     model.train(mode=do_train)
 
     with t.set_grad_enabled(mode=do_train), tqdm(total=len(data_loader),
@@ -39,8 +44,10 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
 
             SSSR_output, SISR_output = model.forward(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
-            assert t.isnan(SSSR_output).any() or (SISR_output is not None and t.isnan(SISR_output).any()), \
-                "FATAL: Network output contains 'NaN' values and so cannot continue. Exiting."
+            assert not (t.isnan(SSSR_output).any().item()), \
+                "FATAL: SSSR network output contains 'NaN' values and so cannot continue. Exiting."
+            assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()), \
+                "FATAL: SISSR network output contains 'NaN' values and so cannot continue. Exiting."
 
             CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
@@ -77,8 +84,10 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
             progressbar.set_postfix_str("Losses [{0}]".format(log_string))
             progressbar.update()
 
-        # Show average losses before ending epoch
+        # Show learning rate and average losses before ending epoch
         log_string = []
+        if do_train:
+            log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]))
         log_string.append("Avg. CE: {:.3f}".format(CE_avg_loss.avg))
         if stage > 1:
             log_string.append("Avg. MSE: {:.3f}".format(MSE_avg_loss.avg))
@@ -91,11 +100,25 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
         return CE_avg_loss, MSE_avg_loss, FA_avg_loss, Avg_loss
 
 
+def write_params_file(filename, *list_params):
+    with open(filename, mode='w') as params_file:
+        for params_str in list_params:
+            if params_str:
+                params_file.write(params_str)
+
+
+def save_weights(model, dir, filename):
+    os.makedirs(dir, exist_ok=True)
+    t.save(model.state_dict(), os.path.join(dir, filename))
+
+
 def main(train,
          test_file=None,
+         weight_file=None,
          device=None,
          num_workers=None,
          val_interval=None,
+         autosave_interval=None,
          batch_size=None,
          epochs=None,
          learning_rate=None,
@@ -150,23 +173,21 @@ def main(train,
         os.makedirs(val_logs_dir, exist_ok=True)
 
         # Write training parameters provided to params.txt log file
-        with open(os.path.join(train_logs_dir, settings.PARAMS_FILE), mode='w') as params_file:
-            params_file.write("Timestamp: {:s}".format(datetime.now().strftime("%c")) + os.linesep)
-            params_file.write("Device: {:s}".format(str(device)) + os.linesep)
-            params_file.write("Validation interval: {:d}".format(val_interval) + os.linesep)
-            params_file.write("Batch size: {:d}".format(batch_size) + os.linesep)
-            params_file.write("Epochs: {:d}".format(epochs) + os.linesep)
-            params_file.write("Learning rate: {:f}".format(learning_rate) + os.linesep)
-            params_file.write("Momentum: {:f}".format(momentum) + os.linesep)
-            params_file.write("Weight decay: {:f}".format(weight_decay) + os.linesep)
-            params_file.write("Poly power: {:f}".format(poly_power) + os.linesep)
-            params_file.write("Stage: {:d}".format(stage) + os.linesep)
-            if stage > 1:
-                params_file.write("Loss Weight 1: {:f}".format(w1) + os.linesep)
-
-                if stage > 2:
-                    params_file.write("Loss Weight 2: {:f}".format(w2) + os.linesep)
-            params_file.write("Description: {:s}".format(description) + os.linesep)
+        write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
+                          "Timestamp: {:s}".format(datetime.now().strftime("%c")),
+                          "Device: {:s}".format(str(device)),
+                          "Validation interval: {:d}".format(val_interval),
+                          "Autosave interval: {:d}".format(autosave_interval),
+                          "Batch size: {:d}".format(batch_size),
+                          "Epochs: {:d}".format(epochs),
+                          "Learning rate: {:f}".format(learning_rate),
+                          "Momentum: {:f}".format(momentum),
+                          "Weight decay: {:f}".format(weight_decay),
+                          "Poly power: {:f}".format(poly_power),
+                          "Stage: {:d}".format(stage),
+                          "Loss Weight 1: {:f}".format(w1) if stage > 1 else None,
+                          "Loss Weight 2: {:f}".format(w2) if stage > 2 else None,
+                          "Description: {:s}".format(description) if description else None)
 
         # Start training and validation
         with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger, \
@@ -177,7 +198,8 @@ def main(train,
                                     lr=learning_rate,
                                     momentum=momentum,
                                     weight_decay=weight_decay)
-            scheduler = t.optim.lr_scheduler.ExponentialLR(optimizer, gamma=poly_power)
+            scheduler = PolynomialLR(optimizer, max_decay_steps=epochs, end_learning_rate=0.001, power=poly_power)
+            #scheduler = t.optim.lr_scheduler.ExponentialLR(optimizer, gamma=poly_power)
 
             # Load weights from previous stages, if any
             if stage > 1:
@@ -208,7 +230,8 @@ def main(train,
                                               data_loader=train_loader,
                                               w1=w1,
                                               w2=w2,
-                                              optimizer=optimizer)
+                                              optimizer=optimizer,
+                                              scheduler=scheduler)
 
                 # Log training losses for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss.avg, epoch)
@@ -221,7 +244,13 @@ def main(train,
                 # Log learning rate for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
 
-                if (epoch + 1) % val_interval == 0:
+                # Auto save weights between 'autosave_interval' epochs
+                if epoch % autosave_interval == 0:
+                    save_weights(model,
+                                 settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
+                                 settings.WEIGHTS_FILE.format(description='', epoch=epoch))
+
+                if epoch % val_interval == 0:
                     # Do validation at epoch intervals of 'val_interval'
                     CE_val_avg_loss, \
                     MSE_val_avg_loss, \
@@ -241,9 +270,11 @@ def main(train,
                             val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss.avg, epoch)
                         val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss.avg, epoch)
 
+                # Calculate new learning rate for next epoch
+                scheduler.step()
+
             # Save training weights for this stage
-            os.makedirs(settings.WEIGHTS_DIR.format(stage=stage))
-            t.save(model.state_dict(), os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE))
+            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE.format(description='final', epoch=epochs))
             train_logger.add_text("INFO", "Training was completed successfully and weights saved.", epochs)
 
             log_string = "\n################################# Stage {:d} training ENDED #################################".format(stage)
@@ -251,16 +282,11 @@ def main(train,
     else:
         # Evaluation/Testing on input image mode
 
-        # Module imports
-        import numpy as np
-        import torchvision as tv
-        from PIL import Image, ImageOps
-
         model.eval()
 
         # Load weights for specified stage
         tqdm.write("INFO: Loading weights for stage {:d}...".format(stage))
-        model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE)))
+        model.load_state_dict(t.load(weight_file))
 
         # Copy the model into 'device'
         model = model.to(device)
@@ -305,76 +331,107 @@ if __name__ == '__main__':
     assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
         "This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION)
 
-    parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Segmantic Segmentation' CVPR 2020 paper.")
-    parser.add_argument('--train', action='store_true', default=False, help="Train the model")
-    parser.add_argument('--test_file', type=str, help="Run evaluation on a image file using trained weights")
-    parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
-    parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
-    parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
-    parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
-    parser.add_argument('--epochs', type=int, help="Number of epochs to train")
-    parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
-    parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
-    parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
-    parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
-    parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
-    parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
-    parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
-    parser.add_argument('--description', type=str, default='', help="Description text to save with params.txt")
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Segmantic Segmentation' CVPR 2020 paper.")
+        
+        # Evaluation arguments
+        parser.add_argument('--test_file', type=str, help="Run evaluation on a image file using trained weights")
+        parser.add_argument('--weight_file', type=str, default='', help="Optionally specify weight file to use (by default final weight for stage is used)")
+        
+        # Training/Validation arguments ('--device' and '--stage' also applies to evaluation though)
+        parser.add_argument('--train', action='store_true', default=False, help="Train the model")
+        parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
+        parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
+        parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
+        parser.add_argument('--autosave_interval', default=5, type=int, help="Epoch intervals to auto save weights after in training")
+        parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
+        parser.add_argument('--epochs', type=int, help="Number of epochs to train")
+        parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
+        parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
+        parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
+        parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
+        parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
+        parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
+        parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
+        parser.add_argument('--description', type=str, default='', help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
+        args = parser.parse_args()
 
-    # Validate arguments according to mode
-    if args.train:
-        if not args.num_workers >= 0:
-            raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
+        # Validate arguments according to mode
+        if args.train:
+            if not args.num_workers >= 0:
+                raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
 
-        if not args.val_interval > 0:
-            raise argparse.ArgumentTypeError("'--val_interval' should be greater than 0!")
+            if not args.val_interval > 0:
+                raise argparse.ArgumentTypeError("'--val_interval' should be greater than 0!")
 
-        if not args.batch_size > 0:
-            raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
+            if not args.autosave_interval > 0:
+                raise argparse.ArgumentTypeError("'--autosave_interval' should be greater than 0!")
 
-        if args.epochs is None or not args.epochs > 0:
-            raise argparse.ArgumentTypeError("'--epochs' should be provided and it must be greater than 0!")
+            if not args.batch_size > 0:
+                raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
-        if not args.learning_rate > 0.:
-            raise argparse.ArgumentTypeError("'--learning_rate' should be greater than 0!")
+            if args.epochs is None or not args.epochs > 0:
+                raise argparse.ArgumentTypeError("'--epochs' should be provided and it must be greater than 0!")
 
-        if not args.momentum > 0.:
-            raise argparse.ArgumentTypeError("'--momentum' should be greater than 0!")
+            if not args.learning_rate > 0.:
+                raise argparse.ArgumentTypeError("'--learning_rate' should be greater than 0!")
 
-        if not args.weight_decay > 0.:
-            raise argparse.ArgumentTypeError("'--weight_decay' should be greater than 0!")
+            if not args.momentum > 0.:
+                raise argparse.ArgumentTypeError("'--momentum' should be greater than 0!")
 
-        if not args.poly_power > 0.:
-            raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
+            if not args.weight_decay > 0.:
+                raise argparse.ArgumentTypeError("'--weight_decay' should be greater than 0!")
 
-        for stage in range(args.stage - 1, 0, -1):
-            if not os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE)):
-                raise argparse.ArgumentTypeError("Couldn't find weight file from previous stage {:d}!".format(stage))
-    else:
-        if args.test_file is None:
-            raise argparse.ArgumentTypeError("'--test_file' is required when '--train' parameter is not specified!")
+            if not args.poly_power > 0.:
+                raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
 
-        if not os.path.isfile(args.test_file):
-            raise argparse.ArgumentTypeError("File specified in '--test_file' parameter doesn't exists!")
+            for stage in range(args.stage - 1, 0, -1):
+                if not os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHT_FILE)):
+                    raise argparse.ArgumentTypeError("Couldn't find weight file from previous stage {:d}!".format(stage))
 
-        if not os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.WEIGHTS_FILE)):
-            raise argparse.ArgumentTypeError("Couldn't find weight file for stage {:d}! Please train this stage first."\
-                    .format(args.stage))
+            # Warning if there are already weights for this stage
+            if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHT_FILE)):
+                answer = input("WARN: Weight for this stage already exists. Continue training from scratch? (y/n)").lower()
+                if answer == 'y':
+                    shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
+                    shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage), ignore_errors=True)
+                else:
+                    sys.exit(0)
+        else:
+            if args.test_file is None:
+                raise argparse.ArgumentTypeError("'--test_file' is required when '--train' parameter is not specified!")
 
-    main(train=args.train,
-         test_file=args.test_file,
-         device=t.device('cuda' if args.device == 'gpu' else args.device),
-         num_workers=args.num_workers,
-         val_interval=args.val_interval,
-         batch_size=args.batch_size,
-         epochs=args.epochs,
-         learning_rate=args.learning_rate,
-         momentum=args.momentum,
-         weight_decay=args.weight_decay,
-         poly_power=args.poly_power,
-         stage=args.stage,
-         w1=args.w1,
-         w2=args.w2,
-         description=args.description)
+            if not os.path.isfile(args.test_file):
+                raise argparse.ArgumentTypeError("File specified in '--test_file' parameter doesn't exists!")
+
+            if not args.weight_file:
+                args.weight_file = os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHT_FILE)
+
+            if not os.path.isfile(args.weight_file):
+                raise argparse.ArgumentTypeError("Couldn't find weight file '{:s}'!".format(args.weight_file))
+
+    
+        main(train=args.train,
+             test_file=args.test_file,
+             weight_file=args.weight_file,
+             device=t.device('cuda' if args.device == 'gpu' else args.device),
+             num_workers=args.num_workers,
+             val_interval=args.val_interval,
+             autosave_interval=args.autosave_interval,
+             batch_size=args.batch_size,
+             epochs=args.epochs,
+             learning_rate=args.learning_rate,
+             momentum=args.momentum,
+             weight_decay=args.weight_decay,
+             poly_power=args.poly_power,
+             stage=args.stage,
+             w1=args.w1,
+             w2=args.w2,
+             description=args.description)
+
+    except KeyboardInterrupt:
+        tqdm.write("INFO: Caught 'Ctrl+c' SIGINT signal. Aborted operation.")
+
+    except argparse.ArgumentTypeError as ex:
+        tqdm.write("ERROR: {:s}".format(str(ex)) + os.linesep)
+        parser.print_usage()

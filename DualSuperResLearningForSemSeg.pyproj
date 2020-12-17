@@ -27,6 +27,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="consts.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="datasets\Cityscapes\settings.py">
       <SubType>Code</SubType>
     </Compile>
@@ -50,6 +53,12 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\ResNet101.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\schedulers\PolynomialLR.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\schedulers\__init__.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
@@ -83,6 +92,7 @@
     <Folder Include="models\" />
     <Folder Include="models\losses\" />
     <Folder Include="models\modules\" />
+    <Folder Include="models\schedulers\" />
     <Folder Include="models\transforms\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />

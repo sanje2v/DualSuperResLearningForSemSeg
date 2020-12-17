@@ -15,8 +15,8 @@ def getRGBColorFromClass(class_idx):
 
 
 def swapTupleValues(t):
-    assert len(t) == 2, "Only tuple of size 2 is supported!"
-    return (t[1], t[0])
+    assert type(t) in [tuple, list] and len(t) == 2, "Only tuple of size 2 is supported!"
+    return type(t)(t[1], t[0])
 
 
 class AverageMeter(object):

@@ -12,7 +12,9 @@ MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 PARAMS_FILE = 'params.txt'
 WEIGHTS_DIR = os.path.join('weights', 'stage{stage}')
-WEIGHTS_FILE  = 'weights.pl'
+WEIGHTS_AUTOSAVES_DIR = os.path.join(WEIGHTS_DIR, 'autosaves')
+FINAL_WEIGHT_FILE  = 'final.weights'
+AUTOSAVE_WEIGHT_FILE = '_epoch{epoch}.weights'
 LOGS_DIR = os.path.join('logs', 'stage{stage}', '{mode}')
 OUTPUTS_DIR = 'outputs'
 DATASETS_DIR = 'datasets'
