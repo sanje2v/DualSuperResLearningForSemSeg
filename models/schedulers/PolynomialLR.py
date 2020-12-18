@@ -1,4 +1,5 @@
-# NOTE: Source code from repo https://github.com/cmpark0126/pytorch-polynomial-lr-decay
+# NOTE: Source code adapted from public repo: https://www.tensorflow.org/api_docs/python/tf/keras/optimizers/schedules/PolynomialDecay
+import math
 from torch.optim.lr_scheduler import _LRScheduler
 
 
@@ -9,34 +10,25 @@ class PolynomialLR(_LRScheduler):
         optimizer (Optimizer): Wrapped optimizer.
         max_decay_steps: after this step, we stop decreasing learning rate
         end_learning_rate: scheduler stoping learning rate decay, value of learning rate must be this value
-        power: The power of the polynomial.
+        power: The power of the polynomial
+        last_epoch: To continue from an epoch else left to -1 to start from beginning
     """
     
-    def __init__(self, optimizer, max_decay_steps, end_learning_rate=0.0001, power=1.0):
-        if not max_decay_steps > 1.:
-            raise ValueError("'max_decay_steps' should be greater than 1")
+    def __init__(self, optimizer, max_decay_steps, end_learning_rate, power, last_epoch=-1, verbose=False):
         self.max_decay_steps = max_decay_steps
         self.end_learning_rate = end_learning_rate
         self.power = power
-        self.last_step = 0
-        super().__init__(optimizer)
-        
+        super().__init__(optimizer, last_epoch, verbose)
+
+    def __calc_poly_decayed_lr(self, initial_lr):
+        return (initial_lr - self.end_learning_rate)\
+                * math.pow(1. - self.last_epoch / self.max_decay_steps, self.power)\
+                + self.end_learning_rate
 
     def get_lr(self):
-        if self.last_step > self.max_decay_steps:
-            return [self.end_learning_rate for _ in self.base_lrs]
+        if not self._get_lr_called_within_step:
+            warnings.warn("To get the last learning rate computed by the scheduler, "
+                          "please use 'get_last_lr()'.", UserWarning)
 
-        return [(base_lr - self.end_learning_rate) * 
-                ((1 - self.last_step / self.max_decay_steps) ** (self.power)) + 
-                self.end_learning_rate for base_lr in self.base_lrs]
-    
-    def step(self, step=None):
-        if step is None:
-            step = self.last_step + 1
-        self.last_step = step if step != 0 else 1
-        if self.last_step <= self.max_decay_steps:
-            decay_lrs = [(base_lr - self.end_learning_rate) * 
-                         ((1 - self.last_step / self.max_decay_steps) ** (self.power)) + 
-                         self.end_learning_rate for base_lr in self.base_lrs]
-            for param_group, lr in zip(self.optimizer.param_groups, decay_lrs):
-                param_group['lr'] = lr
+        return [self.__calc_poly_decayed_lr(base_lr) for base_lr in self.base_lrs] \
+                if self.last_epoch > 0 else self.base_lrs

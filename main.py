@@ -119,6 +119,7 @@ def main(train,
          num_workers=None,
          val_interval=None,
          autosave_interval=None,
+         autosave_history=None,
          batch_size=None,
          epochs=None,
          learning_rate=None,
@@ -203,11 +204,11 @@ def main(train,
 
             # Load weights from previous stages, if any
             if stage > 1:
-                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.WEIGHTS_FILE)))
+                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHT_FILE)))
                 if stage > 2:
-                    model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.WEIGHTS_FILE)))
+                    model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHT_FILE)))
 
-            # Copy the model into 'device'
+            # Copy the model into 'device' memory
             model = model.to(device)
 
             # Start training and then validation after specific intervals
@@ -245,10 +246,20 @@ def main(train,
                 train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
 
                 # Auto save weights between 'autosave_interval' epochs
-                if epoch % autosave_interval == 0:
+                if autosave_history > 0 and epoch % autosave_interval == 0:
                     save_weights(model,
                                  settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                 settings.WEIGHTS_FILE.format(description='', epoch=epoch))
+                                 settings.AUTOSAVE_WEIGHT_FILE.format(epoch=epoch))
+
+                    # Delete old autosaves, if any
+                    for i in range(epoch - autosave_history * autosave_interval, 1, -autosave_interval):
+                        autosave_weight_filename = os.path.join(settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
+                                                                settings.AUTOSAVE_WEIGHT_FILE.format(epoch=i))
+
+                        if not os.path.isfile(autosave_weight_filename):
+                            break
+
+                        os.remove(autosave_weight_filename)
 
                 if epoch % val_interval == 0:
                     # Do validation at epoch intervals of 'val_interval'
@@ -274,14 +285,13 @@ def main(train,
                 scheduler.step()
 
             # Save training weights for this stage
-            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.WEIGHTS_FILE.format(description='final', epoch=epochs))
+            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHT_FILE)
             train_logger.add_text("INFO", "Training was completed successfully and weights saved.", epochs)
 
             log_string = "\n################################# Stage {:d} training ENDED #################################".format(stage)
             tqdm.write(log_string)
     else:
         # Evaluation/Testing on input image mode
-
         model.eval()
 
         # Load weights for specified stage
@@ -301,7 +311,7 @@ def main(train,
                                                          tv.transforms.Resize(size=DSRLSS.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
                                                          tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
                 input_image_tensor = input_transform(input_image).to(device)
-                SSSR_output, _ = model.forward(input_image_tensor)  # Add batch dimension and change to (B, C, H, W)
+                SSSR_output, _ = model.forward(input_image_tensor)
                 SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
 
             # Prepare output image consisting of model input and segmentation image side-by-side
@@ -344,6 +354,7 @@ if __name__ == '__main__':
         parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
         parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
         parser.add_argument('--autosave_interval', default=5, type=int, help="Epoch intervals to auto save weights after in training")
+        parser.add_argument('--autosave_history', default=5, type=int, help="Number of latest autosaved weights to keep while deleting old ones, 0 to disable autosave")
         parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
         parser.add_argument('--epochs', type=int, help="Number of epochs to train")
         parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
@@ -366,6 +377,9 @@ if __name__ == '__main__':
 
             if not args.autosave_interval > 0:
                 raise argparse.ArgumentTypeError("'--autosave_interval' should be greater than 0!")
+
+            if not args.autosave_history >= 0:
+                raise argparse.ArgumentTypeError("'--autosave_history' should be equal (to disable) or greater than 0!")
 
             if not args.batch_size > 0:
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
@@ -391,7 +405,7 @@ if __name__ == '__main__':
 
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHT_FILE)):
-                answer = input("WARN: Weight for this stage already exists. Continue training from scratch? (y/n)").lower()
+                answer = input("WARN: Weight for this stage already exists. Continue training from scratch deleting its weights and logs? (y/n) ").lower()
                 if answer == 'y':
                     shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
                     shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage), ignore_errors=True)
@@ -418,6 +432,7 @@ if __name__ == '__main__':
              num_workers=args.num_workers,
              val_interval=args.val_interval,
              autosave_interval=args.autosave_interval,
+             autosave_history=args.autosave_history,
              batch_size=args.batch_size,
              epochs=args.epochs,
              learning_rate=args.learning_rate,
