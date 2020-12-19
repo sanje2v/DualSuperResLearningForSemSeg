@@ -16,6 +16,7 @@ from models.schedulers import PolynomialLR
 from models.losses import FALoss
 from models.transforms import DuplicateToScaledImageTransform, PILToClassLabelLongTensor
 from utils import *
+import consts
 import settings
 from datasets.Cityscapes import settings as cityscapes_settings
         
@@ -105,6 +106,7 @@ def write_params_file(filename, *list_params):
         for params_str in list_params:
             if params_str:
                 params_file.write(params_str)
+                params_file.write(os.linesep)
 
 
 def save_weights(model, dir, filename):
@@ -176,9 +178,12 @@ def main(train,
         # Write training parameters provided to params.txt log file
         write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
                           "Timestamp: {:s}".format(datetime.now().strftime("%c")),
+                          "Resuming weight: {:s}".format(resume_weight),
                           "Device: {:s}".format(str(device)),
+                          "No. of workers: {:d}".format(num_workers),
                           "Validation interval: {:d}".format(val_interval),
                           "Autosave interval: {:d}".format(autosave_interval),
+                          "Autosave history: {:d}".format(autosave_history),
                           "Batch size: {:d}".format(batch_size),
                           "Epochs: {:d}".format(epochs),
                           "Learning rate: {:f}".format(learning_rate),
@@ -252,13 +257,10 @@ def main(train,
                                  settings.AUTOSAVE_WEIGHT_FILE.format(epoch=epoch))
 
                     # Delete old autosaves, if any
-                    for i in range(epoch - autosave_history * autosave_interval, 1, -autosave_interval):
-                        autosave_weight_filename = os.path.join(settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                                                settings.AUTOSAVE_WEIGHT_FILE.format(epoch=i))
-
-                        if not os.path.isfile(autosave_weight_filename):
-                            break
-
+                    autosave_epoch_to_delete = epoch - autosave_history * autosave_interval
+                    autosave_weight_filename = os.path.join(settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
+                                                            settings.AUTOSAVE_WEIGHT_FILE.format(epoch=autosave_epoch_to_delete))
+                    if os.path.isfile(autosave_weight_filename):
                         os.remove(autosave_weight_filename)
 
                 if epoch % val_interval == 0:
@@ -277,7 +279,7 @@ def main(train,
                     val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
                     if stage > 1:
                         val_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_val_avg_loss.avg, epoch)
-                        if stage == 3:
+                        if stage > 2:
                             val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss.avg, epoch)
                         val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss.avg, epoch)
 
@@ -315,7 +317,7 @@ def main(train,
                 SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
 
             # Prepare output image consisting of model input and segmentation image side-by-side
-            output_image = np.empty((DSRLSS.MODEL_OUTPUT_SIZE[0], DSRLSS.MODEL_OUTPUT_SIZE[1] * 2, 3), dtype=np.uint8)
+            output_image = np.empty((DSRLSS.MODEL_OUTPUT_SIZE[0], DSRLSS.MODEL_OUTPUT_SIZE[1] * 2, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
             argmax_map = np.argmax(SSSR_output, axis=0)
 
             for y in range(DSRLSS.MODEL_OUTPUT_SIZE[0]):
@@ -348,8 +350,10 @@ if __name__ == '__main__':
         parser.add_argument('--test_file', type=str, help="Run evaluation on a image file using trained weights")
         parser.add_argument('--weight_file', type=str, default='', help="Optionally specify weight file to use (by default final weight for stage is used)")
         
-        # Training/Validation arguments ('--device' and '--stage' also applies to evaluation though)
+        # Training/Validation arguments (except '--device' and '--stage' also applies to evaluation though)
         parser.add_argument('--train', action='store_true', default=False, help="Train the model")
+        parser.add_argument('--resume_weight', action=str, default=None, help="Resume training with given weight file")
+        parser.add_argument('')
         parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
         parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
         parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
@@ -369,6 +373,9 @@ if __name__ == '__main__':
 
         # Validate arguments according to mode
         if args.train:
+            if args.resume and not os.path.isfile(args.resume):
+                raise argparse.ArgumentTypeError("'--resume' specified a weight file that doesn't exists!")
+
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
 
