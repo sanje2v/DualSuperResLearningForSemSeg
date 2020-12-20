@@ -36,6 +36,15 @@
     <Compile Include="datasets\Cityscapes\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="datasets\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="metrices\AverageMeter.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="metrices\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\losses\FALoss.py">
       <SubType>Code</SubType>
     </Compile>
@@ -94,6 +103,7 @@
     <Folder Include="models\modules\" />
     <Folder Include="models\schedulers\" />
     <Folder Include="models\transforms\" />
+    <Folder Include="metrices\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />
   </ItemGroup>

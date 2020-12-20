@@ -12,6 +12,8 @@ LABEL_MAPPING_DICT = \
 assert min(LABEL_MAPPING_DICT.values()) == 0 and max(LABEL_MAPPING_DICT.values()) == (DATASET_NUM_CLASSES - 1), \
     "'LABEL_MAPPING_DICT' must contain mappings starting from 0 to {:d}!".format(DATASET_NUM_CLASSES - 1)
 # Provides colors to each class to visualize segmentation maps
+# NOTE: Color values from 'https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py'
+    #       for all the classes where 'ignoreInEval' is False in 'labels' variable.
 CLASS_RGB_COLOR = \
 [
     (0, 0, 0), (128, 64, 128), (244, 35, 232), (70, 70, 70), (102, 102, 156), (190, 153, 153), \

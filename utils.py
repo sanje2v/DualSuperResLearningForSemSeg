@@ -1,3 +1,6 @@
+import platform
+import ctypes
+import termcolor
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
@@ -8,10 +11,18 @@ def check_version(version, major, minor):
     return version[0] >= major and version[1] >= minor
 
 
-def getRGBColorFromClass(class_idx):
-    # NOTE: Color values from 'https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py'
-    #       for all the classes where 'ignoreInEval' is False in 'labels' variable.
-    return cityscapes_settings.CLASS_RGB_COLOR[class_idx]
+def prevent_system_sleep():
+    # NOTE: Only Windows OS supported for automatic system sleep disable until process ends function.
+    #       For other OSes, the user should be advised to do so through their system settings.
+    if platform.system() == 'Windows':
+        # We prevent the system from sleeping but allow the display to turn off
+        ES_CONTINUOUS = 0x80000000
+        ES_SYSTEM_REQUIRED = 0x00000001
+
+        if (ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) != 0):
+            return True
+    
+    return False
 
 
 def swapTupleValues(t):
@@ -19,25 +30,11 @@ def swapTupleValues(t):
     return type(t)((t[1], t[0]))
 
 
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
+def INFO(text):
+    return termcolor.colored("INFO: " + text, 'green')
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+def CAUTION(text):
+    return termcolor.colored("CAUTION: " + text, 'yellow')
 
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
+def FATAL(text):
+    return termcolor.colored("FATAL: " + text, 'red', attrs=['reverse', 'blink'])
