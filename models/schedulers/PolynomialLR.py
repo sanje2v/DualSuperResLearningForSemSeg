@@ -1,5 +1,5 @@
 # NOTE: Source code adapted from public repo: https://www.tensorflow.org/api_docs/python/tf/keras/optimizers/schedules/PolynomialDecay
-import math
+import warnings
 from torch.optim.lr_scheduler import _LRScheduler
 
 
@@ -22,7 +22,7 @@ class PolynomialLR(_LRScheduler):
 
     def __calc_poly_decayed_lr(self, initial_lr):
         return (initial_lr - self.end_learning_rate)\
-                * math.pow(1. - self.last_epoch / self.max_decay_steps, self.power)\
+                * ((1. - self.last_epoch / self.max_decay_steps) ** self.power)\
                 + self.end_learning_rate
 
     def get_lr(self):

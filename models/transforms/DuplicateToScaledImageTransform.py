@@ -14,7 +14,7 @@ class DuplicateToScaledImageTransform:
             pic_tensor (Tensor Image): Image tensor to scale.
 
         Returns:
-            (Tensor, Tensor): (Scaled image tensor, Original Image tensor).
+            (Tensor, Tensor): (Scaled image tensor, Original image tensor).
         """
         scaled_pic_tensor = t.squeeze(F.interpolate(t.unsqueeze(pic_tensor, dim=0), size=self.new_size), dim=0)
         

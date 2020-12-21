@@ -21,7 +21,6 @@ from utils import *
 import consts
 import settings
 from datasets.Cityscapes import settings as cityscapes_settings
-        
 
 
 
@@ -111,7 +110,7 @@ def write_params_file(filename, *list_params):
         for params_str in list_params:
             if params_str:
                 params_file.write(params_str)
-                params_file.write(os.linesep)
+                params_file.write('\n')     # NOTE: '\n' here automatically converts it to newline for the current platform
 
 
 def save_weights(model, dir, filename):
@@ -486,5 +485,5 @@ if __name__ == '__main__':
         tqdm.write(INFO("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
 
     except argparse.ArgumentTypeError as ex:
-        tqdm.write(FATAL("{:s}".format(str(ex)) + os.linesep))
+        tqdm.write(FATAL("{:s}".format(str(ex)) + '\n'))
         parser.print_usage()

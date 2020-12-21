@@ -157,7 +157,7 @@ class DSRLSS(t.nn.Module):
         if self.training:
             if self.stage > 1:
                 # Single Image Super-Resolution (SISR) decoder
-                SISR_output = self.SISR_decoder(cat_features)
+                SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)
 
                 if self.stage > 2:
                     # Feature transform module for SSSR
