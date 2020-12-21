@@ -136,7 +136,7 @@ def main(command,
          w1=None,
          w2=None,
          description=None,
-         image=None,
+         image_file=None,
          weights=None):
 
     # Time keeper
@@ -335,7 +335,7 @@ def main(command,
         model = model.to(target_device)
 
         # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
-        with ImageOps.exif_transpose(Image.open(image))\
+        with ImageOps.exif_transpose(Image.open(image_file))\
                 .convert('RGB')\
                 .resize(swapTupleValues(DSRLSS.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
             with t.no_grad():
@@ -358,7 +358,7 @@ def main(command,
         with Image.fromarray(output_image, mode='RGB') as output_image:    # Convert from numpy array to PIL Image
             # Save and show output on plot
             os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
-            output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(image))[0] + '.png')
+            output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(image_file))[0] + '.png')
 
             output_image.save(output_image_filename, format='PNG')
             output_image.show(title='Segmentation output')
@@ -400,7 +400,7 @@ if __name__ == '__main__':
         
         # Evaluation arguments
         test_parser = command_parser.add_parser('test', help='Test trained weights with a single input image')
-        test_parser.add_argument('--image', type=str, required=True, help="Run evaluation on a image file using trained weights")
+        test_parser.add_argument('--image_file', type=str, required=True, help="Run evaluation on a image file using trained weights")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
 
@@ -466,14 +466,14 @@ if __name__ == '__main__':
                     sys.exit(0)
 
         elif args.command == 'test':
-            if not os.path.isfile(args.image):
-                raise argparse.ArgumentTypeError("File specified in '--image' parameter doesn't exists!")
+            if not os.path.isfile(args.image_file):
+                raise argparse.ArgumentTypeError("File specified in '--image_file' parameter doesn't exists!")
 
             if not os.path.isfile(args.weights):
                 raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
 
         # Do action in 'command'
-        assert args.command in ['train', 'test'], "BUG CHECK: Unimplemented 'args.command'!"
+        assert args.command in ['train', 'test'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
         main(**args.__dict__)
 
     except KeyboardInterrupt:
