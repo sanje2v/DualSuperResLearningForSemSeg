@@ -159,9 +159,9 @@ def main(command,
 
         # Load weights from previous stages, if any
         if stage > 1:
-            model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHT_FILE)), strict=False)
+            model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHTS_FILE)), strict=False)
             if stage > 2:
-                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHT_FILE)), strict=False)
+                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHTS_FILE)), strict=False)
 
         # Copy the model into 'target_device' memory
         model = model.to(target_device)
@@ -206,7 +206,7 @@ def main(command,
         # Write training parameters provided to params.txt log file
         write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
                           "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
-                          "Resuming weight: {:s}".format(resume_weights) if resume_weights else None,
+                          "Resuming weights: {:s}".format(resume_weights) if resume_weights else None,
                           "Resuming epoch: {:d}".format(resume_epoch) if resume_weights else None,
                           "Device: {:s}".format(device),
                           "No. of workers: {:d}".format(num_workers),
@@ -217,7 +217,7 @@ def main(command,
                           "Epochs: {:d}".format(epochs),
                           "Learning rate: {:f}".format(learning_rate),
                           "Momentum: {:f}".format(momentum),
-                          "Weight decay: {:f}".format(weight_decay),
+                          "Weights decay: {:f}".format(weights_decay),
                           "Poly power: {:f}".format(poly_power),
                           "Stage: {:d}".format(stage),
                           "Loss Weight 1: {:f}".format(w1) if stage > 1 else None,
@@ -240,7 +240,7 @@ def main(command,
                                      last_epoch=(resume_epoch - 1))
 
             # Start training and then validation after specific intervals
-            train_logger.add_text("INFO", "Training started on: {:s}".format(process_start_timestamp.strftime("%c")), (resume_epoch + 1))
+            train_logger.add_text("INFO", "Training started on {:s}".format(process_start_timestamp.strftime("%c")), (resume_epoch + 1))
             log_string = "\n################################# Stage {:d} training STARTED #################################".format(stage)
             tqdm.write(log_string)
 
@@ -278,12 +278,12 @@ def main(command,
                 if autosave_history > 0 and epoch % autosave_interval == 0:
                     save_weights(model,
                                  settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                 settings.AUTOSAVE_WEIGHT_FILE.format(epoch=epoch))
+                                 settings.AUTOSAVE_WEIGHTS_FILE.format(epoch=epoch))
 
                     # Delete old autosaves, if any
                     autosave_epoch_to_delete = epoch - autosave_history * autosave_interval
                     autosave_weight_filename = os.path.join(settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                                            settings.AUTOSAVE_WEIGHT_FILE.format(epoch=autosave_epoch_to_delete))
+                                                            settings.AUTOSAVE_WEIGHTS_FILE.format(epoch=autosave_epoch_to_delete))
                     if os.path.isfile(autosave_weight_filename):
                         os.remove(autosave_weight_filename)
 
@@ -311,7 +311,7 @@ def main(command,
                 scheduler.step()
 
             # Save training weights for this stage
-            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHT_FILE)
+            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE)
             
             process_end_timestamp = datetime.now()
             process_time_taken_hrs = (process_end_timestamp - process_start_timestamp).total_seconds() / timedelta(hours=1).total_seconds()
@@ -328,14 +328,14 @@ def main(command,
         # Create model and set to evaluation mode disabling all batch normalization layers
         model = DSRLSS(stage=1).eval()
 
-        # Load specified weight file
+        # Load specified weights file
         model.load_state_dict(t.load(weights), strict=True)
 
         # Copy the model into 'target_device'
         model = model.to(target_device)
 
         # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
-        with ImageOps.exif_transpose(Image.open(image_file))\
+        with ImageOps.exif_transpose(Image.open(image))\
                 .convert('RGB')\
                 .resize(swapTupleValues(DSRLSS.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
             with t.no_grad():
@@ -353,12 +353,12 @@ def main(command,
             for y in range(DSRLSS.MODEL_OUTPUT_SIZE[0]):
                 for x in range(DSRLSS.MODEL_OUTPUT_SIZE[1]):
                     output_image[y, x, :] = input_image.getpixel((x, y))
-                    output_image[y, x + DSRLSS.MODEL_OUTPUT_SIZE[1], :] = cityscapes_settings.CLASS_RGB_COLOR[class_idx](argmax_map[y, x])
+                    output_image[y, x + DSRLSS.MODEL_OUTPUT_SIZE[1], :] = cityscapes_settings.CLASS_RGB_COLOR[(argmax_map[y, x])]
         
         with Image.fromarray(output_image, mode='RGB') as output_image:    # Convert from numpy array to PIL Image
             # Save and show output on plot
             os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
-            output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(test_file))[0] + '.png')
+            output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(image))[0] + '.png')
 
             output_image.save(output_image_filename, format='PNG')
             output_image.show(title='Segmentation output')
@@ -380,7 +380,7 @@ if __name__ == '__main__':
 
         # Training commands
         train_parser = command_parser.add_parser('train', help='Train model for different stages')
-        train_parser.add_argument('--resume_weights', default=None, type=str, help="Resume training with given weight file")
+        train_parser.add_argument('--resume_weights', default=None, type=str, help="Resume training with given weights file")
         train_parser.add_argument('--resume_epoch', default=0, type=int, help="Resume training with epoch")
         train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         train_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
@@ -391,7 +391,7 @@ if __name__ == '__main__':
         train_parser.add_argument('--epochs', type=int, help="Number of epochs to train")
         train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
-        train_parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weight decay for SGD")
+        train_parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weights decay for SGD")
         train_parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
         train_parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
@@ -412,12 +412,11 @@ if __name__ == '__main__':
 
         # Validate arguments according to mode
         if args.command == 'train':
-            if args.resume_weights:
-                if not os.path.isfile(args.resume_weights):
-                    raise argparse.ArgumentTypeError("'--resume_weights' specified a weight file that doesn't exists!")
+            if args.resume_weights and not os.path.isfile(args.resume_weights):
+                raise argparse.ArgumentTypeError("'--resume_weights' specified a weights file that doesn't exists!")
 
-                if not args.resume_epoch >= 0:
-                    raise argparse.ArgumentTypeError("'--resume_epoch' should be greater than or equal to 0!")
+            if not args.resume_epoch >= 0:
+                raise argparse.ArgumentTypeError("'--resume_epoch' should be greater than or equal to 0!")
 
             if not args.resume_weights and args.resume_epoch:
                 raise argparse.ArgumentTypeError("'--resume_epoch' doesn't make sense without specifying '--resume_weights'!")
@@ -438,7 +437,7 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
             if args.epochs is None or not args.epochs > 0:
-                raise argparse.ArgumentTypeError("'--epochs' should be provided and it must be greater than 0!")
+                raise argparse.ArgumentTypeError("'--epochs' should be specified and it must be greater than 0!")
 
             if not args.learning_rate > 0.:
                 raise argparse.ArgumentTypeError("'--learning_rate' should be greater than 0!")
@@ -453,12 +452,13 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
 
             for stage in range(args.stage - 1, 0, -1):
-                if not os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHT_FILE)):
-                    raise argparse.ArgumentTypeError("Couldn't find weight file from previous stage {:d}!".format(stage))
+                weights_file = os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE)
+                if not os.path.isfile(weights_file):
+                    raise argparse.ArgumentTypeError("Couldn't find weights file '{0:s}' from previous stage {1:d}!".format(weights_file, stage))
 
             # Warning if there are already weights for this stage
-            if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHT_FILE)):
-                answer = input(CAUTION("Weight for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
+            if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
+                answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
                 if answer == 'y':
                     shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
                     shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage), ignore_errors=True)
@@ -466,17 +466,11 @@ if __name__ == '__main__':
                     sys.exit(0)
 
         elif args.command == 'test':
-            if args.test_file is None:
-                raise argparse.ArgumentTypeError("'--test_file' is required when '--train' parameter is not specified!")
+            if not os.path.isfile(args.image):
+                raise argparse.ArgumentTypeError("File specified in '--image' parameter doesn't exists!")
 
-            if not os.path.isfile(args.test_file):
-                raise argparse.ArgumentTypeError("File specified in '--test_file' parameter doesn't exists!")
-
-            if not args.weight_file:
-                args.weight_file = os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHT_FILE)
-
-            if not os.path.isfile(args.weight_file):
-                raise argparse.ArgumentTypeError("Couldn't find weight file '{:s}'!".format(args.weight_file))
+            if not os.path.isfile(args.weights):
+                raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
 
         # Do action in 'command'
         assert args.command in ['train', 'test'], "BUG CHECK: Unimplemented 'args.command'!"
