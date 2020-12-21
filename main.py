@@ -362,10 +362,11 @@ def main(command,
             output_image_filename = os.path.join(settings.OUTPUTS_DIR, os.path.splitext(os.path.basename(test_file))[0] + '.png')
 
             output_image.save(output_image_filename, format='PNG')
-            tqdm.write(INFO("Output image saved as: {:s}".format(output_image_filename)))
-
             output_image.show(title='Segmentation output')
-        
+
+        process_end_timestamp = datetime.now()
+        process_time_taken_secs = (process_end_timestamp - process_start_timestamp).total_seconds()
+        tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
 
 if __name__ == '__main__':
@@ -400,11 +401,10 @@ if __name__ == '__main__':
         
         # Evaluation arguments
         test_parser = command_parser.add_parser('test', help='Test trained weights with a single input image')
-        test_parser.add_argument('--image', type=str, help="Run evaluation on a image file using trained weights")
-        test_parser.add_argument('--weights', type=str, default='', help="Weights file to use")
+        test_parser.add_argument('--image', type=str, required=True, help="Run evaluation on a image file using trained weights")
+        test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
-        
-        
+
         args = parser.parse_args()
 
         # Validate common arguments for both modes
