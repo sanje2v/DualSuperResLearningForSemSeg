@@ -84,7 +84,7 @@ class DSRLSS(t.nn.Module):
 
     @staticmethod
     def _define_SISR_decoder(in_channels, out_channels, upscale_factor: int):
-        assert type(upscale_factor) == float, "BUG CHECK: 'upscale_factor' must be an integer type"
+        assert type(upscale_factor) == int, "BUG CHECK: 'upscale_factor' must be an integer type"
 
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=(out_channels * (upscale_factor ** 2)),

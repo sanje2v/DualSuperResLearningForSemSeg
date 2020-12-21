@@ -159,9 +159,9 @@ def main(command,
 
         # Load weights from previous stages, if any
         if stage > 1:
-            model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHT_FILE)))
+            model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHT_FILE)), strict=False)
             if stage > 2:
-                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHT_FILE)))
+                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHT_FILE)), strict=False)
 
         # Copy the model into 'target_device' memory
         model = model.to(target_device)
@@ -169,7 +169,7 @@ def main(command,
         # Prepare data from CityScapes dataset
         os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
-            tqdm.write(FATAL("Cityscapes dataset was not found under '{0:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
+            tqdm.write(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
             return
 
         train_input_transforms = tv.transforms.Compose([tv.transforms.ToTensor(),
@@ -329,7 +329,7 @@ def main(command,
         model = DSRLSS(stage=1).eval()
 
         # Load specified weight file
-        model.load_state_dict(t.load(weights))
+        model.load_state_dict(t.load(weights), strict=True)
 
         # Copy the model into 'target_device'
         model = model.to(target_device)
@@ -479,6 +479,7 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("Couldn't find weight file '{:s}'!".format(args.weight_file))
 
         # Do action in 'command'
+        assert args.command in ['train', 'test'], "BUG CHECK: Unimplemented 'args.command'!"
         main(**args.__dict__)
 
     except KeyboardInterrupt:
