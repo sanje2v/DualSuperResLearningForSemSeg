@@ -130,20 +130,24 @@ def main(command,
          epochs=None,
          learning_rate=None,
          momentum=None,
-         weight_decay=None,
+         weights_decay=None,
          poly_power=None,
          stage=None,
          w1=None,
          w2=None,
          description=None,
          image_file=None,
-         weights=None):
+         weights=None,
+         src_weights=None,
+         dest_weights=None,
+         keep_train_params=None):
 
     # Time keeper
     process_start_timestamp = datetime.now()
 
-    # Device to perform calculation in
-    target_device = t.device('cuda' if device == 'gpu' else device)
+    if device:
+        # Device to perform calculation in
+        target_device = t.device('cuda' if device == 'gpu' else device)
 
     if command == 'train':
         # Training and Validation on dataset mode
@@ -153,7 +157,7 @@ def main(command,
             tqdm.write(INFO("System will NOT be allowed to sleep until this training is complete/interrupted."))
         else:
             tqdm.write(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
-        
+
         # Create model according to stage
         model = DSRLSS(stage)
 
@@ -196,7 +200,7 @@ def main(command,
                                              target_transform=target_transforms,
                                              transforms=None)
         val_loader = t.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-        
+
         # Make sure proper log directories exist
         train_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='train')
         val_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='val')
@@ -232,7 +236,7 @@ def main(command,
             optimizer = t.optim.SGD(model.parameters(),
                                     lr=learning_rate,
                                     momentum=momentum,
-                                    weight_decay=weight_decay)
+                                    weight_decay=weights_decay)
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
                                      end_learning_rate=0.001,
@@ -354,7 +358,7 @@ def main(command,
                 for x in range(DSRLSS.MODEL_OUTPUT_SIZE[1]):
                     output_image[y, x, :] = input_image.getpixel((x, y))
                     output_image[y, x + DSRLSS.MODEL_OUTPUT_SIZE[1], :] = cityscapes_settings.CLASS_RGB_COLOR[(argmax_map[y, x])]
-        
+
         with Image.fromarray(output_image, mode='RGB') as output_image:    # Convert from numpy array to PIL Image
             # Save and show output on plot
             os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
@@ -367,6 +371,16 @@ def main(command,
         process_time_taken_secs = (process_end_timestamp - process_start_timestamp).total_seconds()
         tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
+    elif command == 'purne_weights':
+        # Create model with/out training params according to 'keep_train_params'
+        model = DSRLSS(stage=1).train(mode=keep_train_params)
+
+        # Load source weights file
+        model.load_state_dict(t.load(src_weights), strict=False)
+
+        save_weights(model, *os.path.split(dest_weights))
+
+
 
 if __name__ == '__main__':
     assert check_version(sys.version_info, *settings.MIN_PYTHON_VERSION), \
@@ -378,7 +392,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Segmantic Segmentation' CVPR 2020 paper.")
         command_parser = parser.add_subparsers(title='commands', dest='command', required=True)
 
-        # Training commands
+        # Training arguments
         train_parser = command_parser.add_parser('train', help='Train model for different stages')
         train_parser.add_argument('--resume_weights', default=None, type=str, help="Resume training with given weights file")
         train_parser.add_argument('--resume_epoch', default=0, type=int, help="Resume training with epoch")
@@ -391,7 +405,7 @@ if __name__ == '__main__':
         train_parser.add_argument('--epochs', type=int, help="Number of epochs to train")
         train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
-        train_parser.add_argument('--weight_decay', type=float, default=0.0005, help="Weights decay for SGD")
+        train_parser.add_argument('--weights_decay', type=float, default=0.0005, help="Weights decay for SGD")
         train_parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
         train_parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
@@ -404,11 +418,14 @@ if __name__ == '__main__':
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
 
+        # Purne weights arguments
+        purne_weights_parser = command_parser.add_parser('purne_weights', help='Removes all weights from a weights file which are not needed for inference')
+        purne_weights_parser.add_argument('--src_weights', type=str, required=True, help='Weights file to prune')
+        purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help='New weights file to write to')
+        purne_weights_parser.add_argument('--keep_train_params', action='store_true', help='Specify to keep params for training-only layers like BatchNorm')
+
         args = parser.parse_args()
 
-        # Validate common arguments for both modes
-        if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-            raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
         # Validate arguments according to mode
         if args.command == 'train':
@@ -420,6 +437,9 @@ if __name__ == '__main__':
 
             if not args.resume_weights and args.resume_epoch:
                 raise argparse.ArgumentTypeError("'--resume_epoch' doesn't make sense without specifying '--resume_weights'!")
+
+            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
+                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
@@ -445,8 +465,8 @@ if __name__ == '__main__':
             if not args.momentum > 0.:
                 raise argparse.ArgumentTypeError("'--momentum' should be greater than 0!")
 
-            if not args.weight_decay > 0.:
-                raise argparse.ArgumentTypeError("'--weight_decay' should be greater than 0!")
+            if not args.weights_decay > 0.:
+                raise argparse.ArgumentTypeError("'--weights_decay' should be greater than 0!")
 
             if not args.poly_power > 0.:
                 raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
@@ -461,7 +481,7 @@ if __name__ == '__main__':
                 answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
                 if answer == 'y':
                     shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
-                    shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage), ignore_errors=True)
+                    shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage))
                 else:
                     sys.exit(0)
 
@@ -472,13 +492,26 @@ if __name__ == '__main__':
             if not os.path.isfile(args.weights):
                 raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
 
+            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
+                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+
+        elif args.command == 'purne_weights':
+            if not os.path.isfile(args.src_weights):
+                raise argparse.ArgumentTypeError("File specified in '--src_weights' parameter doesn't exists!")
+
+            if os.path.isfile(args.dest_weights):
+                answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).tolower()
+                if answer != 'y':
+                    sys.exit(0)
+
         # Do action in 'command'
-        assert args.command in ['train', 'test'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
+        assert args.command in ['train', 'test', 'purne_weights'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
         main(**args.__dict__)
 
     except KeyboardInterrupt:
         tqdm.write(INFO("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
 
     except argparse.ArgumentTypeError as ex:
-        tqdm.write(FATAL("{:s}".format(str(ex)) + '\n'))
+        tqdm.write(FATAL("{:s}".format(str(ex))))
+        tqdm.write('\n')
         parser.print_usage()

@@ -89,6 +89,7 @@ class DSRLSS(t.nn.Module):
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=(out_channels * (upscale_factor ** 2)),
                                            kernel_size=3,
+                                           stride=1,
                                            padding=1),
                                t.nn.PixelShuffle(upscale_factor=upscale_factor))
 
@@ -97,6 +98,8 @@ class DSRLSS(t.nn.Module):
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=out_channels,
                                            kernel_size=1,
+                                           stride=1,
+                                           padding=8,
                                            bias=True),
                                t.nn.BatchNorm2d(num_features=out_channels),
                                t.nn.ReLU(inplace=True))
@@ -161,9 +164,9 @@ class DSRLSS(t.nn.Module):
 
                 if self.stage > 2:
                     # Feature transform module for SSSR
-                    SSSR_features_output = self.SSSR_feature_transformer(SSSR_output)
+                    SSSR_features_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
 
                     # Feature transform module for SISR
-                    SISR_features_output = self.SISR_feature_transformer(SISR_output)
+                    SISR_features_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
 
         return SSSR_output, SISR_output
