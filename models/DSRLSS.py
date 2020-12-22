@@ -157,6 +157,8 @@ class DSRLSS(t.nn.Module):
         SSSR_output = self.SSSR_decoder['upsample16_pred'](SSSR_output)                 # NOTE: Output size (B, 20, 1024, 2048)
 
         SISR_output = None
+        SSSR_transform_output = None
+        SISR_transform_output = None
         if self.training:
             if self.stage > 1:
                 # Single Image Super-Resolution (SISR) decoder
@@ -164,9 +166,9 @@ class DSRLSS(t.nn.Module):
 
                 if self.stage > 2:
                     # Feature transform module for SSSR
-                    SSSR_features_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
+                    SSSR_transform_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
 
                     # Feature transform module for SISR
-                    SISR_features_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
+                    SISR_transform_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
 
-        return SSSR_output, SISR_output
+        return SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output

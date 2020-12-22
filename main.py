@@ -47,7 +47,7 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
             if do_train:
                 optimizer.zero_grad()
 
-            SSSR_output, SISR_output = model.forward(input_scaled)
+            SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model.forward(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
             assert not (t.isnan(SSSR_output).any().item()), \
                 FATAL("SSSR network output contains 'NaN' values and so cannot continue. Exiting.")
@@ -56,7 +56,7 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
 
             CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
-            FA_loss = (w2 * FALoss()(SSSR_output, SISR_output)) if stage > 2 else t.tensor(0., requires_grad=False)
+            FA_loss = (w2 * FALoss()(SSSR_transform_output, SISR_transform_output)) if stage > 2 else t.tensor(0., requires_grad=False)
             loss = CE_loss + MSE_loss + FA_loss
 
             if do_train:
@@ -347,7 +347,7 @@ def main(command,
                                                          tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
                                                          tv.transforms.Resize(size=DSRLSS.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
                                                          tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
-                SSSR_output, _ = model.forward(input_transform(input_image).to(target_device))
+                SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(target_device))
                 SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
 
             # Prepare output image consisting of model input and segmentation image side-by-side (hence '* 2')
