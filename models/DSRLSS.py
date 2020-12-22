@@ -98,8 +98,8 @@ class DSRLSS(t.nn.Module):
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=out_channels,
                                            kernel_size=1,
-                                           stride=1,
-                                           padding=8,
+                                           stride=8,
+                                           padding=0,
                                            bias=True),
                                t.nn.BatchNorm2d(num_features=out_channels),
                                t.nn.ReLU(inplace=True))

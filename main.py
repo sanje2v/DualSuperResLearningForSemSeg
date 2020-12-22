@@ -79,11 +79,11 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
 
             # Add loss information to progress bar
             log_string = []
-            log_string.append("CE: {:.3f}".format(CE_loss))
+            log_string.append("CE: {:.4f}".format(CE_loss))
             if stage > 1:
-                log_string.append("MSE: {:.3f}".format(MSE_loss))
+                log_string.append("MSE: {:.4f}".format(MSE_loss))
                 if stage > 2:
-                    log_string.append("FA: {:.3f}".format(FA_loss))
+                    log_string.append("FA: {:.4f}".format(FA_loss))
                 log_string.append("Total: {:.3f}".format(loss))
             log_string = ', '.join(log_string)
             progressbar.set_postfix_str("Losses [{0}]".format(log_string))
@@ -93,11 +93,11 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
         log_string = []
         if do_train:
             log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]))
-        log_string.append("Avg. CE: {:.3f}".format(CE_avg_loss.avg))
+        log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss.avg))
         if stage > 1:
-            log_string.append("Avg. MSE: {:.3f}".format(MSE_avg_loss.avg))
+            log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss.avg))
             if stage > 2:
-                log_string.append("Avg. FA: {:.3f}".format(FA_avg_loss.avg))
+                log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
             log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
         log_string = ', '.join(log_string)
         tqdm.write(log_string)
@@ -224,8 +224,8 @@ def main(command,
                           "Weights decay: {:f}".format(weights_decay),
                           "Poly power: {:f}".format(poly_power),
                           "Stage: {:d}".format(stage),
-                          "Loss Weight 1: {:f}".format(w1) if stage > 1 else None,
-                          "Loss Weight 2: {:f}".format(w2) if stage > 2 else None,
+                          "Loss Weight 1: {:.4f}".format(w1) if stage > 1 else None,
+                          "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
                           "Description: {:s}".format(description) if description else None)
 
         # Start training and validation
