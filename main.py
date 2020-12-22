@@ -373,12 +373,14 @@ def main(command,
 
     elif command == 'purne_weights':
         # Create model with/out training params according to 'keep_train_params'
+        keep_train_params = False   # TODO currently
         model = DSRLSS(stage=1).train(mode=keep_train_params)
 
         # Load source weights file
         model.load_state_dict(t.load(src_weights), strict=False)
 
         save_weights(model, *os.path.split(dest_weights))
+        tqdm.write(INFO("Output weight saved."))
 
 
 
@@ -422,7 +424,8 @@ if __name__ == '__main__':
         purne_weights_parser = command_parser.add_parser('purne_weights', help='Removes all weights from a weights file which are not needed for inference')
         purne_weights_parser.add_argument('--src_weights', type=str, required=True, help='Weights file to prune')
         purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help='New weights file to write to')
-        purne_weights_parser.add_argument('--keep_train_params', action='store_true', help='Specify to keep params for training-only layers like BatchNorm')
+        # UNIMPLEMENTED
+        #purne_weights_parser.add_argument('--keep_train_params', action='store_true', help='Specify to keep params for training-only layers like BatchNorm')
 
         args = parser.parse_args()
 
@@ -500,7 +503,7 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("File specified in '--src_weights' parameter doesn't exists!")
 
             if os.path.isfile(args.dest_weights):
-                answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).tolower()
+                answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).lower()
                 if answer != 'y':
                     sys.exit(0)
 
