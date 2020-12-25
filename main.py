@@ -283,6 +283,7 @@ def main(command,
                     save_weights(model,
                                  settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
                                  settings.AUTOSAVE_WEIGHTS_FILE.format(epoch=epoch))
+                    tqdm.write(INFO("Autosaved weights for epoch {0:d} under '{1:s}'.".format(epoch, settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage))))
 
                     # Delete old autosaves, if any
                     autosave_epoch_to_delete = epoch - autosave_history * autosave_interval
@@ -296,12 +297,12 @@ def main(command,
                     CE_val_avg_loss, \
                     MSE_val_avg_loss, \
                     FA_val_avg_loss, \
-                    Avg_val_loss = do_train_test(do_train=False,
-                                                 model=model,
-                                                 device=target_device,
-                                                 batch_size=batch_size,
-                                                 stage=stage,
-                                                 data_loader=val_loader)
+                    Avg_val_loss = do_train_val(do_train=False,
+                                                model=model,
+                                                device=target_device,
+                                                batch_size=batch_size,
+                                                stage=stage,
+                                                data_loader=val_loader)
 
                     # Log validation losses for this epoch to TensorBoard
                     val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
