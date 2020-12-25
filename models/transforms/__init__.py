@@ -1,2 +1,3 @@
+from .JointCompose import JointCompose
 from .DuplicateToScaledImageTransform import DuplicateToScaledImageTransform
 from .PILToClassLabelLongTensor import PILToClassLabelLongTensor

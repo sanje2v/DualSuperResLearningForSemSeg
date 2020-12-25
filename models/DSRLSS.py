@@ -28,7 +28,7 @@ class DSRLSS(t.nn.Module):
                                              t.nn.BatchNorm2d(num_features=out_channels2),
                                              t.nn.ReLU(inplace=True))
         }
-        
+
         return t.nn.ModuleDict(feature_extractor_modules)
 
     @staticmethod

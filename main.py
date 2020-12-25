@@ -8,6 +8,7 @@ from tqdm.auto import tqdm as tqdm
 import numpy as np
 import torch as t
 import torchvision as tv
+import torchvision.transforms.functional as F
 from torch.utils import tensorboard as tb
 from datetime import datetime, timedelta
 from PIL import Image, ImageOps
@@ -15,7 +16,7 @@ from PIL import Image, ImageOps
 from models import DSRLSS
 from models.schedulers import PolynomialLR
 from models.losses import FALoss
-from models.transforms import DuplicateToScaledImageTransform, PILToClassLabelLongTensor
+from models.transforms import JointCompose, DuplicateToScaledImageTransform, PILToClassLabelLongTensor
 from metrices import AverageMeter
 from utils import *
 import consts
@@ -91,8 +92,7 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
 
         # Show learning rate and average losses before ending epoch
         log_string = []
-        if do_train:
-            log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]))
+        log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]) if do_train else "Validation results:")
         log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss.avg))
         if stage > 1:
             log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss.avg))
@@ -176,29 +176,27 @@ def main(command,
             tqdm.write(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
             return
 
-        train_input_transforms = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                        tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
-                                                        tv.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-                                                        DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
-        val_input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                     tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
-                                                     DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)])
-        target_transforms = tv.transforms.Compose([PILToClassLabelLongTensor()])
+        train_joint_transforms = JointCompose([lambda img, seg: (tv.transforms.ToTensor()(img), PILToClassLabelLongTensor()(seg)),
+                                               lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                               lambda img, seg: (F.hflip(img), F.hflip(seg)) if t.rand(1) < 0.5 else (img, seg),
+                                               lambda img, seg: (tv.transforms.GaussianBlur(kernel_size=2)(img), seg),
+                                               lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+        val_joint_transforms = JointCompose([lambda img, seg: (tv.transforms.ToTensor()(img), PILToClassLabelLongTensor()(seg)),
+                                             lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                             lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+
         train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                                split='train',
                                                mode='fine',
                                                target_type='semantic',
-                                               transform=train_input_transforms,
-                                               target_transform=target_transforms,
-                                               transforms=None)
+                                               transforms=train_joint_transforms)
         train_loader = t.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                              split='val',
                                              mode='fine',
                                              target_type='semantic',
-                                             transform=val_input_transform,
-                                             target_transform=target_transforms,
-                                             transforms=None)
+                                             transforms=val_joint_transforms)
         val_loader = t.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
         # Make sure proper log directories exist
