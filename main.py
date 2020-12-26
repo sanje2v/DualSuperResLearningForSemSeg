@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 from models import DSRLSS
 from models.schedulers import PolynomialLR
 from models.losses import FALoss
-from models.transforms import JointCompose, DuplicateToScaledImageTransform, PILToClassLabelLongTensor
+from models.transforms import *
 from metrices import AverageMeter
 from utils import *
 import consts
@@ -42,6 +42,14 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
                                                  leave=False,
                                                  bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         for ((input_scaled, input_org), target) in data_loader:
+            # SANITY CHECK: Check data doesn't have any 'NaN' values
+            assert not (t.isnan(input_scaled).any().item()),\
+                FATAL("'input_scaled' contains 'NaN' values")
+            assert not (False if input_org is None else t.isnan(input_org).any().item()),\
+                FATAL("'input_org' contains 'NaN' values")
+            assert not (t.isnan(target).any().item()),\
+                FATAL("'target' contains 'NaN' values")
+
             input_scaled = input_scaled.to(device)
             input_org = (None if stage == 1 else input_org.to(device))
             target = target.to(device)
@@ -50,9 +58,9 @@ def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, 
 
             SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model.forward(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
-            assert not (t.isnan(SSSR_output).any().item()), \
+            assert not (t.isnan(SSSR_output).any().item()),\
                 FATAL("SSSR network output contains 'NaN' values and so cannot continue. Exiting.")
-            assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()), \
+            assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()),\
                 FATAL("SISSR network output contains 'NaN' values and so cannot continue. Exiting.")
 
             CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
@@ -176,13 +184,15 @@ def main(command,
             tqdm.write(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
             return
 
-        train_joint_transforms = JointCompose([lambda img, seg: (tv.transforms.ToTensor()(img), PILToClassLabelLongTensor()(seg)),
-                                               lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
-                                               lambda img, seg: (F.hflip(img), F.hflip(seg)) if t.rand(1) < 0.5 else (img, seg),
-                                               lambda img, seg: (tv.transforms.GaussianBlur(kernel_size=2)(img), seg),
+        train_joint_transforms = JointCompose([#lambda img, seg: (F.to_grayscale(img, num_output_channels=consts.NUM_RGB_CHANNELS) if t.rand(1) < 0.5 else img, seg),
+                                               JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                               JointCenterCrop(min_scale=1.0, max_scale=1.8),
+                                               #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                               #lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                               #JointHFlip(),
+                                               #lambda img, seg: (tv.transforms.GaussianBlur(kernel_size=3)(img), seg),  # CAUTION: 'kernel_size' should be > 0 and odd integer
                                                lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-        val_joint_transforms = JointCompose([lambda img, seg: (tv.transforms.ToTensor()(img), PILToClassLabelLongTensor()(seg)),
+        val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                              lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
                                              lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
 

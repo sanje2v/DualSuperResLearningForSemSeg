@@ -73,10 +73,16 @@
     <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\transforms\JointCenterCrop.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\transforms\JointCompose.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="models\transforms\PILToClassLabelLongTensor.py">
+    <Compile Include="models\transforms\JointHFlip.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\JointImageAndLabelTensor.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\__init__.py">

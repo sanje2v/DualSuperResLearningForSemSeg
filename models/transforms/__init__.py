@@ -1,3 +1,5 @@
 from .JointCompose import JointCompose
 from .DuplicateToScaledImageTransform import DuplicateToScaledImageTransform
-from .PILToClassLabelLongTensor import PILToClassLabelLongTensor
+from .JointImageAndLabelTensor import JointImageAndLabelTensor
+from .JointCenterCrop import JointCenterCrop
+from .JointHFlip import JointHFlip

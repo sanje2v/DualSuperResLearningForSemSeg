@@ -18,7 +18,8 @@ class ASPP(t.nn.Module):
         for branch_param in branch_params:
             self.branches.append(t.nn.Sequential(t.nn.Conv2d(**branch_param, bias=True),
                                                  t.nn.BatchNorm2d(num_features=out_channels),
-                                                 t.nn.ReLU(inplace=True)))
+                                                 t.nn.ReLU(inplace=True),
+                                                 t.nn.Dropout(p=0.2)))
 
     def forward(self, x):
         branch_outputs = [self.branches[i](x) for i in range(4)]
