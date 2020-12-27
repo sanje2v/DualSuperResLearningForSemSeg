@@ -30,6 +30,9 @@
     <Compile Include="consts.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="datasets\Cityscapes\consts.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="datasets\Cityscapes\settings.py">
       <SubType>Code</SubType>
     </Compile>
@@ -73,9 +76,6 @@
     <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="models\transforms\JointCenterCrop.py">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="models\transforms\JointCompose.py">
       <SubType>Code</SubType>
     </Compile>
@@ -83,6 +83,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\JointImageAndLabelTensor.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\JointRandomCrop.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\__init__.py">

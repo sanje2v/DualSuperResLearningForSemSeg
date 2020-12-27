@@ -1,5 +1,5 @@
 from .JointCompose import JointCompose
 from .DuplicateToScaledImageTransform import DuplicateToScaledImageTransform
 from .JointImageAndLabelTensor import JointImageAndLabelTensor
-from .JointCenterCrop import JointCenterCrop
+from .JointRandomCrop import JointRandomCrop
 from .JointHFlip import JointHFlip

@@ -1,0 +1,1 @@
+NUM_RGB_CHANNELS = 3

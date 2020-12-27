@@ -181,16 +181,16 @@ def main(command,
         # Prepare data from CityScapes dataset
         os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
-            tqdm.write(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
-            return
+            raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
 
-        train_joint_transforms = JointCompose([#lambda img, seg: (F.to_grayscale(img, num_output_channels=consts.NUM_RGB_CHANNELS) if t.rand(1) < 0.5 else img, seg),
+        train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
                                                JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                               JointCenterCrop(min_scale=1.0, max_scale=1.8),
-                                               #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                               #lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
-                                               #JointHFlip(),
-                                               #lambda img, seg: (tv.transforms.GaussianBlur(kernel_size=3)(img), seg),  # CAUTION: 'kernel_size' should be > 0 and odd integer
+                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                               JointHFlip(),
+                                               # CAUTION: 'kernel_size' should be > 0 and odd integer
+                                               lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
+                                               lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+                                               lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
                                                lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
         val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                              lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
@@ -381,8 +381,7 @@ def main(command,
         tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
     elif command == 'purne_weights':
-        # Create model with/out training params according to 'keep_train_params'
-        keep_train_params = False   # TODO currently
+        # Purne weights not needed for inference
         model = DSRLSS(stage=1).train(mode=keep_train_params)
 
         # Load source weights file
@@ -433,8 +432,6 @@ if __name__ == '__main__':
         purne_weights_parser = command_parser.add_parser('purne_weights', help='Removes all weights from a weights file which are not needed for inference')
         purne_weights_parser.add_argument('--src_weights', type=str, required=True, help='Weights file to prune')
         purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help='New weights file to write to')
-        # UNIMPLEMENTED
-        #purne_weights_parser.add_argument('--keep_train_params', action='store_true', help='Specify to keep params for training-only layers like BatchNorm')
 
         args = parser.parse_args()
 
