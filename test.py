@@ -119,9 +119,32 @@
 
 
 
-import termcolor
+#import termcolor
 
-def FATAL(text):
-    return termcolor.colored("FATAL: " + text, 'red', attrs=['reverse', 'blink'])
+#def FATAL(text):
+#    return termcolor.colored("FATAL: " + text, 'red', attrs=['reverse', 'blink'])
 
-print(FATAL("Something went wrong"))
+#print(FATAL("Something went wrong"))
+
+
+
+
+from PIL import Image
+
+img = Image.open('./datasets/Cityscapes/data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+
+org_size = img.size    # CAUTION: For Image, size is (W, H) order in contrast to (H, W) for Tensor
+scale_factor = 3.5
+
+crop_width = int(1.0 / scale_factor * org_size[0])
+crop_height = int(1.0 / scale_factor * org_size[1])
+crop_x = (org_size[0] - crop_width) // 2
+crop_y = (org_size[1] - crop_height) // 2
+crop_box = [crop_x,\
+            crop_y,\
+            crop_x+crop_width,\
+            crop_y+crop_height]
+print(crop_box)
+
+img = img.resize(size=org_size, resample=Image.BILINEAR, box=crop_box)
+img.save('out.png')
