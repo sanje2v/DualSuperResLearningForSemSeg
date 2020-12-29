@@ -45,6 +45,9 @@
     <Compile Include="metrices\AverageMeter.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="metrices\mIoU.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="metrices\__init__.py">
       <SubType>Code</SubType>
     </Compile>
@@ -120,6 +123,7 @@
     <Folder Include="weights\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="README.md" />
     <Content Include="weights\.placeholder" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

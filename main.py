@@ -8,7 +8,6 @@ from tqdm.auto import tqdm as tqdm
 import numpy as np
 import torch as t
 import torchvision as tv
-import torchvision.transforms.functional as F
 from torch.utils import tensorboard as tb
 from datetime import datetime, timedelta
 from PIL import Image, ImageOps
@@ -121,19 +120,28 @@ def write_params_file(filename, *list_params):
                 params_file.write('\n')     # NOTE: '\n' here automatically converts it to newline for the current platform
 
 
-def save_weights(model, dir, filename):
+def load_checkpoint_or_weights(filename):
+    return t.load(filename)
+
+
+def save_checkpoint(dir, filename, **checkpoint_vars):
     os.makedirs(dir, exist_ok=True)
-    t.save(model.state_dict(), os.path.join(dir, filename))
+    t.save(checkpoint_vars, os.path.join(dir, filename))
+
+
+def save_weights(dir, filename, model):
+    os.makedirs(dir, exist_ok=True)
+    t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
 
 
 def main(command,
-         resume_weights=None,
-         resume_epoch=None,
          device=None,
          num_workers=None,
          val_interval=None,
-         autosave_interval=None,
-         autosave_history=None,
+         checkpoint=None,
+         checkpoint_interval=None,
+         checkpoint_history=None,
+         init_weights=None,
          batch_size=None,
          epochs=None,
          learning_rate=None,
@@ -148,16 +156,39 @@ def main(command,
          weights=None,
          src_weights=None,
          dest_weights=None,
-         keep_train_params=None):
+         dataset_split=None):
 
     # Time keeper
     process_start_timestamp = datetime.now()
 
+    if command == 'resume_train':
+        checkpoint_dict = load_checkpoint_or_weights(checkpoint)
+
+        device = checkpoint_dict['device']
+        num_workers = checkpoint_dict['num_workers']
+        val_interval = checkpoint_dict['val_interval']
+        checkpoint_interval = checkpoint_dict['checkpoint_interval']
+        checkpoint_history = checkpoint_dict['checkpoint_history']
+        init_weights = checkpoint_dict['init_weights']
+        batch_size = checkpoint_dict['batch_size']
+        epochs = checkpoint_dict['epochs']
+        learning_rate = checkpoint_dict['learning_rate']
+        momentum = checkpoint_dict['momentum']
+        weights_decay = checkpoint_dict['weights_decay']
+        poly_power = checkpoint_dict['poly_power']
+        stage = checkpoint_dict['stage']
+        w1 = checkpoint_dict['w1']
+        w2 = checkpoint_dict['w2']
+        description = checkpoint_dict['description']
+
     if device:
         # Device to perform calculation in
-        target_device = t.device('cuda' if device == 'gpu' else device)
+        device = 'cuda' if device == 'gpu' else device
+        if device.startswith('cuda') and not t.cuda.is_available():
+            raise Exception("CUDA is not available to use GPU!")
+        target_device = t.device(device)
 
-    if command == 'train':
+    if command in ['train', 'resume_train']:
         # Training and Validation on dataset mode
 
         # Prevent system from entering sleep state so that long training session is not interrupted
@@ -168,12 +199,17 @@ def main(command,
 
         # Create model according to stage
         model = DSRLSS(stage)
+        if command == 'resume_train':
+            model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
+        else:
+            # Load initial weight, if any
+            if init_weights:
+                model.load_state_dict(load_weights_or_checkpoint(init_weights)['model_state_dict'], strict=False)
 
-        # Load weights from previous stages, if any
-        if stage > 1:
-            model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=1), settings.FINAL_WEIGHTS_FILE)), strict=False)
-            if stage > 2:
-                model.load_state_dict(t.load(os.path.join(settings.WEIGHTS_DIR.format(stage=2), settings.FINAL_WEIGHTS_FILE)), strict=False)
+            # Load checkpoint from previous stage, if not the first stage
+            if stage > 1:
+                weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
+                model.load_state_dict(weights_dict['model_state_dict'], strict=False)
 
         # Copy the model into 'target_device' memory
         model = model.to(target_device)
@@ -185,7 +221,7 @@ def main(command,
 
         train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
                                                JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)(img), seg),
                                                JointHFlip(),
                                                # CAUTION: 'kernel_size' should be > 0 and odd integer
                                                lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
@@ -218,13 +254,13 @@ def main(command,
         # Write training parameters provided to params.txt log file
         write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
                           "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
-                          "Resuming weights: {:s}".format(resume_weights) if resume_weights else None,
-                          "Resuming epoch: {:d}".format(resume_epoch) if resume_weights else None,
                           "Device: {:s}".format(device),
                           "No. of workers: {:d}".format(num_workers),
                           "Validation interval: {:d}".format(val_interval),
-                          "Autosave interval: {:d}".format(autosave_interval),
-                          "Autosave history: {:d}".format(autosave_history),
+                          "Checkpoint interval: {:d}".format(checkpoint_interval),
+                          "Checkpoint history: {:d}".format(checkpoint_history),
+                          "Initial weights: {:s}".format(init_weights) if init_weights else None,
+                          "Resume checkpoint: {:s}".format(checkpoint) if checkpoint else None,
                           "Batch size: {:d}".format(batch_size),
                           "Epochs: {:d}".format(epochs),
                           "Learning rate: {:f}".format(learning_rate),
@@ -245,18 +281,20 @@ def main(command,
                                     lr=learning_rate,
                                     momentum=momentum,
                                     weight_decay=weights_decay)
+            if command == 'resume_train':
+                optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
                                      end_learning_rate=0.001,
                                      power=poly_power,
-                                     last_epoch=(resume_epoch - 1))
+                                     last_epoch=-1)
 
             # Start training and then validation after specific intervals
-            train_logger.add_text("INFO", "Training started on {:s}".format(process_start_timestamp.strftime("%c")), (resume_epoch + 1))
+            train_logger.add_text("INFO", "Training started on {:s}".format(process_start_timestamp.strftime("%c")), 1)
             log_string = "\n################################# Stage {:d} training STARTED #################################".format(stage)
             tqdm.write(log_string)
 
-            for epoch in range((resume_epoch + 1), (epochs + 1)):
+            for epoch in range(1, (epochs + 1)):
                 log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
                 tqdm.write(log_string)
 
@@ -286,19 +324,22 @@ def main(command,
                 # Log learning rate for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
 
-                # Auto save weights between 'autosave_interval' epochs
-                if autosave_history > 0 and epoch % autosave_interval == 0:
-                    save_weights(model,
-                                 settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                 settings.AUTOSAVE_WEIGHTS_FILE.format(epoch=epoch))
-                    tqdm.write(INFO("Autosaved weights for epoch {0:d} under '{1:s}'.".format(epoch, settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage))))
+                # Auto save whole model between 'checkpoint_interval' epochs
+                if checkpoint_history > 0 and epoch % checkpoint_interval == 0:
+                    save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch=epoch),
+                                    device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
+                                    checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
+                                    learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
+                                    description=description, epoch=epoch, model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
+                    tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
+                                                                                                 settings.CHECKPOINTS_DIR.format(stage=stage))))
 
                     # Delete old autosaves, if any
-                    autosave_epoch_to_delete = epoch - autosave_history * autosave_interval
-                    autosave_weight_filename = os.path.join(settings.WEIGHTS_AUTOSAVES_DIR.format(stage=stage),
-                                                            settings.AUTOSAVE_WEIGHTS_FILE.format(epoch=autosave_epoch_to_delete))
-                    if os.path.isfile(autosave_weight_filename):
-                        os.remove(autosave_weight_filename)
+                    checkpoint_epoch_to_delete = epoch - checkpoint_history * checkpoint_interval
+                    checkpoint_to_delete_filename = os.path.join(settings.CHECKPOINTS_DIR.format(stage=stage),
+                                                                 settings.CHECKPOINT_FILE.format(epoch=checkpoint_epoch_to_delete))
+                    if os.path.isfile(checkpoint_to_delete_filename):
+                        os.remove(checkpoint_to_delete_filename)
 
                 if epoch % val_interval == 0:
                     # Do validation at epoch intervals of 'val_interval'
@@ -324,8 +365,8 @@ def main(command,
                 scheduler.step()
 
             # Save training weights for this stage
-            save_weights(model, settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE)
-            
+            save_weights(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE, model)
+
             process_end_timestamp = datetime.now()
             process_time_taken_hrs = (process_end_timestamp - process_start_timestamp).total_seconds() / timedelta(hours=1).total_seconds()
             train_logger.add_text("INFO",
@@ -342,7 +383,7 @@ def main(command,
         model = DSRLSS(stage=1).eval()
 
         # Load specified weights file
-        model.load_state_dict(t.load(weights), strict=True)
+        model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
 
         # Copy the model into 'target_device'
         model = model.to(target_device)
@@ -381,14 +422,61 @@ def main(command,
         tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
     elif command == 'purne_weights':
-        # Purne weights not needed for inference
-        model = DSRLSS(stage=1).train(mode=keep_train_params)
+        with t.no_grad():
+            # Purne weights not needed for inference
+            model = DSRLSS(stage=1).eval()
 
-        # Load source weights file
-        model.load_state_dict(t.load(src_weights), strict=False)
+            # Load source weights file
+            model.load_state_dict(load_checkpoint_or_weights(src_weights)['model_state_dict'], strict=False)
 
-        save_weights(model, *os.path.split(dest_weights))
-        tqdm.write(INFO("Output weight saved."))
+            save_weights(*os.path.split(dest_weights), model)
+            tqdm.write(INFO("Output weight saved in {:s}.".format(dest_weights)))
+
+    elif command == 'benchmark':
+        # Run benchmark using specified weights and display results
+
+        # Create model and set to evaluation mode disabling all batch normalization layers
+        model = DSRLSS(stage=1).eval()
+
+        # Load specified weights file
+        model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
+
+        # Copy the model into 'target_device'
+        model = model.to(target_device)
+
+        # Prepare data from CityScapes dataset
+        os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
+        if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
+            raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'. Please refer to 'README.md'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
+
+        test_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                              lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                              lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+        test_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                              split=dataset_split,
+                                              mode='fine',
+                                              target_type='semantic',
+                                              transforms=test_joint_transforms)
+        test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+        # Run benchmark
+        with t.no_grad():
+            for ((input_scaled, _), target) in test_loader:
+                input_scaled = input_scaled.to(device)
+
+                SSSR_output, _, _, _ = model.forward(input_scaled)
+                SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
+
+                # TODO: mIoU
+
+        # Save benchmark result to output directories in 'benchmark.txt'
+        os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
+        output_benchmark_filename = os.path.join(settings.OUTPUTS_DIR, 'benchmark.txt')
+        with open(output_benchmark_file, 'w') as benchmark_file:
+            benchmark_file.write("Benchmarking results on Cityscapes dataset's {:s} split\n\n".format(dataset_split))
+            benchmark_file.write("On: {:s}\n".format(process_start_timestamp.strftime("%c")))
+            benchmark_file.write("Weights file: {:s}\n\n".format(weights))
+            benchmark_file.write("mIoU: {:d}".format(mIoU))
 
 
 
@@ -399,20 +487,19 @@ if __name__ == '__main__':
         FATAL("This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION))
 
     try:
-        parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Segmantic Segmentation' CVPR 2020 paper.")
+        parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Semantic Segmentation', CVPR 2020 paper.")
         command_parser = parser.add_subparsers(title='commands', dest='command', required=True)
 
         # Training arguments
-        train_parser = command_parser.add_parser('train', help='Train model for different stages')
-        train_parser.add_argument('--resume_weights', default=None, type=str, help="Resume training with given weights file")
-        train_parser.add_argument('--resume_epoch', default=0, type=int, help="Resume training with epoch")
+        train_parser = command_parser.add_parser('train', help="Train model for different stages")
         train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
-        train_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
+        train_parser.add_argument('--num_workers', default=4, type=int, help="No. of workers for data loader")
         train_parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
-        train_parser.add_argument('--autosave_interval', default=5, type=int, help="Epoch intervals to auto save weights after in training")
-        train_parser.add_argument('--autosave_history', default=5, type=int, help="Number of latest autosaved weights to keep while deleting old ones, 0 to disable autosave")
+        train_parser.add_argument('--checkpoint_interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
+        train_parser.add_argument('--checkpoint_history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
+        train_parser.add_argument('--init_weights', default=None, type=str, help="Load initial weights file for model")
         train_parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
-        train_parser.add_argument('--epochs', type=int, help="Number of epochs to train")
+        train_parser.add_argument('--epochs', required=True, type=int, help="No. of epochs to train")
         train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
         train_parser.add_argument('--weights_decay', type=float, default=0.0005, help="Weights decay for SGD")
@@ -421,32 +508,35 @@ if __name__ == '__main__':
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
-        
+
+        # Resume training from checkpoint arguments
+        resume_train_parser = command_parser.add_parser('resume_train', help="Resume training model from checkpoint file")
+        resume_train_parser.add_argument('--checkpoint', required=True, type=str, help="Resume training with given checkpoint file")
+
         # Evaluation arguments
-        test_parser = command_parser.add_parser('test', help='Test trained weights with a single input image')
+        test_parser = command_parser.add_parser('test', help="Test trained weights with a single input image")
         test_parser.add_argument('--image_file', type=str, required=True, help="Run evaluation on a image file using trained weights")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
 
         # Purne weights arguments
-        purne_weights_parser = command_parser.add_parser('purne_weights', help='Removes all weights from a weights file which are not needed for inference')
-        purne_weights_parser.add_argument('--src_weights', type=str, required=True, help='Weights file to prune')
-        purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help='New weights file to write to')
+        purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
+        purne_weights_parser.add_argument('--src_weights', type=str, required=True, help="Checkpoint/Weights file to prune")
+        purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help="New weights file to write to")
+
+        # Benchmark arguments
+        benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
+        benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
+        benchmark_parser.add_argument('--dataset_split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
+        benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        benchmark_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
+        benchmark_parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for benchmarking")
 
         args = parser.parse_args()
 
 
         # Validate arguments according to mode
         if args.command == 'train':
-            if args.resume_weights and not os.path.isfile(args.resume_weights):
-                raise argparse.ArgumentTypeError("'--resume_weights' specified a weights file that doesn't exists!")
-
-            if not args.resume_epoch >= 0:
-                raise argparse.ArgumentTypeError("'--resume_epoch' should be greater than or equal to 0!")
-
-            if not args.resume_weights and args.resume_epoch:
-                raise argparse.ArgumentTypeError("'--resume_epoch' doesn't make sense without specifying '--resume_weights'!")
-
             if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
                 raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
@@ -456,16 +546,23 @@ if __name__ == '__main__':
             if not args.val_interval > 0:
                 raise argparse.ArgumentTypeError("'--val_interval' should be greater than 0!")
 
-            if not args.autosave_interval > 0:
-                raise argparse.ArgumentTypeError("'--autosave_interval' should be greater than 0!")
+            if not args.checkpoint_interval > 0:
+                raise argparse.ArgumentTypeError("'--checkpoint_interval' should be greater than 0!")
 
-            if not args.autosave_history >= 0:
-                raise argparse.ArgumentTypeError("'--autosave_history' should be greater than or  equal (to disable) 0!")
+            if not args.checkpoint_history >= 0:
+                raise argparse.ArgumentTypeError("'--checkpoint_history' should be greater than or equal (to disable) 0!")
+
+            if args.init_weights:
+                if not any(hasExtension(args.init_weights, x) for x in ['.checkpoint', '.weights']):
+                    raise argparse.ArgumentTypeError("'--init_weights' must be of either '.checkpoint' or '.weights' file type!")
+
+                if not os.path.isfile(args.init_weights):
+                   raise argparse.ArgumentTypeError("Couldn't find initial weights file '{0:s}'!".format(args.init_weights))
 
             if not args.batch_size > 0:
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
-            if args.epochs is None or not args.epochs > 0:
+            if not args.epochs > 0:
                 raise argparse.ArgumentTypeError("'--epochs' should be specified and it must be greater than 0!")
 
             if not args.learning_rate > 0.:
@@ -480,10 +577,10 @@ if __name__ == '__main__':
             if not args.poly_power > 0.:
                 raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
 
-            for stage in range(args.stage - 1, 0, -1):
-                weights_file = os.path.join(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE)
-                if not os.path.isfile(weights_file):
-                    raise argparse.ArgumentTypeError("Couldn't find weights file '{0:s}' from previous stage {1:d}!".format(weights_file, stage))
+            if args.stage > 1:
+                prev_weights_file = os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage-1), settings.FINAL_WEIGHTS_FILE)
+                if not os.path.isfile(prev_weights_file):
+                    raise argparse.ArgumentTypeError("Couldn't find weights file '{0:s}' from previous stage {1:d}!".format(prev_weights_file, args.stage-1))
 
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
@@ -494,9 +591,19 @@ if __name__ == '__main__':
                 else:
                     sys.exit(0)
 
+        elif args.command == 'resume_train':
+            if not hasExtension(args.checkpoint, '.checkpoint'):
+                raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file as the whole model and optimizer states needs to be loaded!")
+
+            if not os.path.isfile(args.checkpoint):
+                raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
+
         elif args.command == 'test':
             if not os.path.isfile(args.image_file):
                 raise argparse.ArgumentTypeError("File specified in '--image_file' parameter doesn't exists!")
+
+            if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
+                raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
 
             if not os.path.isfile(args.weights):
                 raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
@@ -505,6 +612,9 @@ if __name__ == '__main__':
                 raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
         elif args.command == 'purne_weights':
+            if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
+                raise argparse.ArgumentTypeError("'--src_weights' must be of either '.checkpoint' or '.weights' file type!")
+
             if not os.path.isfile(args.src_weights):
                 raise argparse.ArgumentTypeError("File specified in '--src_weights' parameter doesn't exists!")
 
@@ -513,9 +623,26 @@ if __name__ == '__main__':
                 if answer != 'y':
                     sys.exit(0)
 
+        elif args.command == 'benchmark':
+            if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
+                raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
+
+            if not os.path.isfile(args.weights):
+                raise argparse.ArgumentTypeError("Couldn't find the specified weights file '{:s}'!".format(args.weights))
+
+            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
+                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+
+            if not args.num_workers >= 0:
+                raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
+
+            if not args.batch_size > 0:
+                raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
+
         # Do action in 'command'
-        assert args.command in ['train', 'test', 'purne_weights'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
+        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'benchmark'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
         main(**args.__dict__)
+
 
     except KeyboardInterrupt:
         tqdm.write(INFO("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))

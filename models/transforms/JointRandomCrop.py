@@ -1,6 +1,5 @@
 import torch as t
 import torchvision.transforms.functional as F
-import torch.nn.functional as F1
 from PIL import Image
 import numpy as np
 
@@ -21,7 +20,7 @@ class JointRandomCrop:
         # Get the default random number generator from numpy
         random_gen = np.random.default_rng()
 
-        org_size = tuple(img.shape[-2:]) if isinstance(img, t.Tensor) else img.size    # CAUTION: For Image, size is (W, H) order in contrast to (H, W) for Tensor
+        org_size = tuple(img.shape[-2:]) if isinstance(img, t.Tensor) else img.size    # CAUTION: For Image, size is in (W, H) order and (H, W) for Tensor
         scale_factor = random_gen.uniform(self.min_scale, self.max_scale)
 
         if scale_factor > 1.0:
