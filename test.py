@@ -129,22 +129,83 @@
 
 
 
+#from PIL import Image
+
+#img = Image.open('./datasets/Cityscapes/data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+
+#org_size = img.size    # CAUTION: For Image, size is (W, H) order in contrast to (H, W) for Tensor
+#scale_factor = 3.5
+
+#crop_width = int(1.0 / scale_factor * org_size[0])
+#crop_height = int(1.0 / scale_factor * org_size[1])
+#crop_x = (org_size[0] - crop_width) // 2
+#crop_y = (org_size[1] - crop_height) // 2
+#crop_box = [crop_x,\
+#            crop_y,\
+#            crop_x+crop_width,\
+#            crop_y+crop_height]
+#print(crop_box)
+
+#img = img.resize(size=org_size, resample=Image.BILINEAR, box=crop_box)
+#img.save('out.png')
+
+
+
+
+
+import torch as t
+import torchvision as tv
+from models.transforms import *
+import numpy as np
+import settings
+from models import DSRLSS
+import datasets.Cityscapes.settings as cityscapes_settings
 from PIL import Image
 
-img = Image.open('./datasets/Cityscapes/data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
+                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                        lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                        JointHFlip(),
+                                        # CAUTION: 'kernel_size' should be > 0 and odd integer
+                                        lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
+                                        lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+                                        #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                        lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                    #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                        split='train',
+                                        mode='fine',
+                                        target_type='semantic',
+                                        transforms=train_joint_transforms)
+train_loader = t.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0)
+val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                        split='val',
+                                        mode='fine',
+                                        target_type='semantic',
+                                        transforms=val_joint_transforms)
+val_loader = t.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
 
-org_size = img.size    # CAUTION: For Image, size is (W, H) order in contrast to (H, W) for Tensor
-scale_factor = 3.5
+data_loader = train_loader
+for ((input_scaled, input_org), target) in data_loader:
+    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
+    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
 
-crop_width = int(1.0 / scale_factor * org_size[0])
-crop_height = int(1.0 / scale_factor * org_size[1])
-crop_x = (org_size[0] - crop_width) // 2
-crop_y = (org_size[1] - crop_height) // 2
-crop_box = [crop_x,\
-            crop_y,\
-            crop_x+crop_width,\
-            crop_y+crop_height]
-print(crop_box)
+    input_org.show()
 
-img = img.resize(size=org_size, resample=Image.BILINEAR, box=crop_box)
-img.save('out.png')
+    target = np.squeeze(target.cpu().numpy(), axis=0)
+    target_img = np.zeros((*target.shape, 3), dtype=np.uint8)
+
+    for y in range(target.shape[0]):
+        for x in range(target.shape[1]):
+            target_img[y, x, :] = cityscapes_settings.CLASS_RGB_COLOR[target[y, x]]
+
+    target_img = Image.fromarray(target_img).convert('RGB')
+
+    target_img.show()
+
+    blended = Image.blend(input_org, target_img, alpha=0.3)
+    blended.show()
+
+    input()
