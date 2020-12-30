@@ -32,7 +32,13 @@ The result of the inference is saved in `./outputs/<image_filename>.png`.
 Weights trained in stage 2 and 3 will have weights for parts of model not needed for inference. So, weights pruning will remove all these weights.
 
 *Example usage:*
-`python main.py prune_weights --src_weights ./weights/stage3/autosaves/epoch50.checkpoint --dest_weights ./output/inference.weights`
+`python main.py prune_weights --src_weights ./weights/stage3/checkpoints/epoch50.checkpoint --dest_weights ./output/inference.weights`
+
+## Inspect checkpoint
+View the keys and dictionary pairs in the specified checkpoint file.
+
+*Example usage:*
+`python main.py inspect_checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint
 
 ## Benchmark
 You can run benchmarking for semantic segmentation using specified weights/checkpoint on specified split of dataset.
