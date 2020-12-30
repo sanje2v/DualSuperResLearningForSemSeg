@@ -434,6 +434,23 @@ def main(command,
             save_weights(*os.path.split(dest_weights), model)
             tqdm.write(INFO("Output weight saved in {:s}.".format(dest_weights)))
 
+    elif command == 'inspect_checkpoint':
+        checkpoint_dict = load_checkpoint_or_weights(checkpoint)
+
+        def prettyInnerDictToStr(key, inner_dict):
+            if key == 'model_state_dict':   # We only print keys for this dict as it is too big to print
+                ret = '{{{0:s}}}'.format(', '.join(inner_dict.keys()))
+            else:
+                ret = str(inner_dict)
+
+            return '\n{0:s}'.format(ret)
+
+        tqdm.write('\n')
+        for key in checkpoint_dict:
+            tqdm.write("{0:s}: {1}".format(key,
+                                           str(checkpoint_dict[key]) if not isinstance(checkpoint_dict[key], dict) else\
+                                               prettyInnerDictToStr(key, checkpoint_dict[key])))
+
     elif command == 'benchmark':
         # Run benchmark using specified weights and display results
 
@@ -525,6 +542,10 @@ if __name__ == '__main__':
         purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
         purne_weights_parser.add_argument('--src_weights', type=str, required=True, help="Checkpoint/Weights file to prune")
         purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help="New weights file to write to")
+
+        # Inspect checkpoint arguments
+        inspect_checkpoint_parser = command_parser.add_parser('inspect_checkpoint', help="View contents of a checkpoint file")
+        inspect_checkpoint_parser.add_argument('--checkpoint', required=True, type=str, help="Checkpoint file to view contents of")
 
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
@@ -625,6 +646,13 @@ if __name__ == '__main__':
                 if answer != 'y':
                     sys.exit(0)
 
+        elif args.command == 'inspect_checkpoint':
+            if not hasExtension(args.checkpoint, '.checkpoint'):
+                raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file!")
+
+            if not os.path.isfile(args.checkpoint):
+                raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
+
         elif args.command == 'benchmark':
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
@@ -642,7 +670,8 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
         # Do action in 'command'
-        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'benchmark'], "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
+        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'benchmark'],\
+            "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
         main(**args.__dict__)
 
 
