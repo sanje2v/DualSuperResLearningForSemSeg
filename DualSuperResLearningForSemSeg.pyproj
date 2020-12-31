@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 1 --description "Something here" --batch_size 2 --num_workers 0 --device cpu</CommandLineArguments>
+    <CommandLineArguments>benchmark --weights C:\Users\Sanjeev\Desktop\Downloaded\stage1\epoch160.checkpoint --num_workers 0</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>

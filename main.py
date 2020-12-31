@@ -16,7 +16,7 @@ from models import DSRLSS
 from models.schedulers import PolynomialLR
 from models.losses import FALoss
 from models.transforms import *
-from metrices import AverageMeter
+from metrices import AverageMeter, mIoU
 from utils import *
 import consts
 import settings
@@ -183,10 +183,9 @@ def main(command,
 
     if device:
         # Device to perform calculation in
-        device = 'cuda' if device == 'gpu' else device
-        if device.startswith('cuda') and not t.cuda.is_available():
+        if device.startswith(('gpu', 'cuda')) and not t.cuda.is_available():
             raise Exception("CUDA is not available to use GPU!")
-        target_device = t.device(device)
+        target_device = t.device('cuda' if device == 'gpu' else device)
 
     if command in ['train', 'resume_train']:
         # Training and Validation on dataset mode
@@ -273,7 +272,7 @@ def main(command,
                           "Description: {:s}".format(description) if description else None)
 
         # Start training and validation
-        with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger, \
+        with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger,\
              tb.SummaryWriter(log_dir=val_logs_dir) as val_logger:
 
             # Training optimizer and schedular
@@ -332,7 +331,8 @@ def main(command,
                                     device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
                                     checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
                                     learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
-                                    description=description, epoch=epoch, model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
+                                    description=description, epoch=epoch, ce_train_avg_loss=CE_train_avg_loss.avg, model_state_dict=model.state_dict(),
+                                    optimizer_state_dict=optimizer.state_dict())
                     tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                                  settings.CHECKPOINTS_DIR.format(stage=stage))))
 
@@ -432,7 +432,7 @@ def main(command,
             model.load_state_dict(load_checkpoint_or_weights(src_weights)['model_state_dict'], strict=True)
 
             save_weights(*os.path.split(dest_weights), model)
-            tqdm.write(INFO("Output weight saved in {:s}.".format(dest_weights)))
+            tqdm.write(INFO("Output weight saved in '{:s}'.".format(dest_weights)))
 
     elif command == 'inspect_checkpoint':
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
@@ -468,34 +468,42 @@ def main(command,
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
             raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'. Please refer to 'README.md'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
 
-        test_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                              lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                              lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-        test_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                              split=dataset_split,
-                                              mode='fine',
-                                              target_type='semantic',
-                                              transforms=test_joint_transforms)
-        test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-        # Run benchmark
         with t.no_grad():
+            test_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                                  lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                                  lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+            test_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                                  split=dataset_split,
+                                                  mode='fine',
+                                                  target_type='semantic',
+                                                  transforms=test_joint_transforms)
+            test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+            # Run benchmark
+            miou = mIoU(num_classes=cityscapes_settings.DATASET_NUM_CLASSES)
             for ((input_scaled, _), target) in test_loader:
-                input_scaled = input_scaled.to(device)
+                SSSR_output, _, _, _ = model.forward(input_scaled.to(target_device))
 
-                SSSR_output, _, _, _ = model.forward(input_scaled)
+                # Prepare pred and target for metrices to process
                 SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
+                target = target.detach().cpu().numpy()
 
-                # TODO: mIoU
+                pred = np.argmax(SSSR_output, axis=1)               # Convert probabilities across dimensions to class label in one 2-D grid
+
+                # Calculate mIoU for this batch
+                miou.update(pred, target)
+
+        total_miou = miou()
+        tqdm.write(INFO("Computed mIoU: {0:.2f}".format(total_miou)))
 
         # Save benchmark result to output directories in 'benchmark.txt'
         os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
         output_benchmark_filename = os.path.join(settings.OUTPUTS_DIR, 'benchmark.txt')
-        with open(output_benchmark_file, 'w') as benchmark_file:
+        with open(output_benchmark_filename, 'w') as benchmark_file:
             benchmark_file.write("Benchmarking results on Cityscapes dataset's {:s} split\n\n".format(dataset_split))
             benchmark_file.write("On: {:s}\n".format(process_start_timestamp.strftime("%c")))
             benchmark_file.write("Weights file: {:s}\n\n".format(weights))
-            benchmark_file.write("mIoU: {:d}".format(mIoU))
+            benchmark_file.write("mIoU: {:.3f}".format(total_miou))
 
 
 
@@ -517,7 +525,7 @@ if __name__ == '__main__':
         train_parser.add_argument('--checkpoint_interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
         train_parser.add_argument('--checkpoint_history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
         train_parser.add_argument('--init_weights', default=None, type=str, help="Load initial weights file for model")
-        train_parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for training and testing")
+        train_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for training and testing")
         train_parser.add_argument('--epochs', required=True, type=int, help="No. of epochs to train")
         train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
@@ -553,7 +561,7 @@ if __name__ == '__main__':
         benchmark_parser.add_argument('--dataset_split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
         benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         benchmark_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
-        benchmark_parser.add_argument('--batch_size', default=4, type=int, help="Batch size to use for benchmarking")
+        benchmark_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for benchmarking")
 
         args = parser.parse_args()
 

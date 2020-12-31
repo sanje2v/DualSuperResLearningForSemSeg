@@ -2,8 +2,13 @@
 [This paper](http://openaccess.thecvf.com/content_CVPR_2020/html/Wang_Dual_Super-Resolution_Learning_for_Semantic_Segmentation_CVPR_2020_paper.html) combines Super-Resolution and Feature Affinity learning to improve traditional semantic segmentation model.
 
 
-# Getting started
+![picture](demo/stage1_output.png)
 
+# To knows
+'.weights' file is to be used for inference and ONLY contains weights for Stage 1 layers.
+'.checkpoint' file contains, on top of Stage 1 weights, other information such as optimizer state, epochs etc that can be used to resume training. 'Inspect checkpoint' discussed below shows how to print these values.
+
+# Getting started
 Before training or benchmarking, please download 'gtFine.zip' and 'leftImg8bit.zip' for [**Cityscapes dataset**](https://www.cityscapes-dataset.com/) and unzip them under './datasets/Cityscapes/data'.
 
 All commands are invoked via `main.py` script. For instance to train, you would use something like `python main.py --train [...]`. Use `python main.py --help` to view all supported actions.
