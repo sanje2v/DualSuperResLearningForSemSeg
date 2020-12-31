@@ -153,121 +153,126 @@
 
 
 
-#import torch as t
-#import torchvision as tv
-#from models.transforms import *
-#import numpy as np
-#import settings
-#from models import DSRLSS
-#import datasets.Cityscapes.settings as cityscapes_settings
-#from PIL import Image
-
-#train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
-#                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-#                                        lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
-#                                        JointHFlip(),
-#                                        # CAUTION: 'kernel_size' should be > 0 and odd integer
-#                                        lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
-#                                        lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
-#                                        #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-#                                        lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-#val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-#                                    #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-#                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-#train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-#                                        split='train',
-#                                        mode='fine',
-#                                        target_type='semantic',
-#                                        transforms=train_joint_transforms)
-#train_loader = t.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0)
-#val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-#                                        split='val',
-#                                        mode='fine',
-#                                        target_type='semantic',
-#                                        transforms=val_joint_transforms)
-#val_loader = t.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
-
-#data_loader = train_loader
-#for ((input_scaled, input_org), target) in data_loader:
-#    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
-#    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
-
-#    input_org.show()
-
-#    target = np.squeeze(target.cpu().numpy(), axis=0)
-#    target_img = np.zeros((*target.shape, 3), dtype=np.uint8)
-
-#    for y in range(target.shape[0]):
-#        for x in range(target.shape[1]):
-#            target_img[y, x, :] = cityscapes_settings.CLASS_RGB_COLOR[target[y, x]]
-
-#    target_img = Image.fromarray(target_img).convert('RGB')
-
-#    target_img.show()
-
-#    blended = Image.blend(input_org, target_img, alpha=0.3)
-#    blended.show()
-
-#    input()
-
-
-
+import torch as t
+import torchvision as tv
+from models.transforms import *
 import numpy as np
+import settings
+from models import DSRLSS
+import datasets.Cityscapes.settings as cityscapes_settings
+from PIL import Image
+
+train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
+                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                        lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                        JointHFlip(),
+                                        # CAUTION: 'kernel_size' should be > 0 and odd integer
+                                        lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
+                                        lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+                                        #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                        lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                    #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                        split='train',
+                                        mode='fine',
+                                        target_type='semantic',
+                                        transforms=train_joint_transforms)
+train_loader = t.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0)
+val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                        split='val',
+                                        mode='fine',
+                                        target_type='semantic',
+                                        transforms=val_joint_transforms)
+val_loader = t.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
+
+data_loader = val_loader
+for ((input_scaled, input_org), target) in data_loader:
+    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
+    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
+
+    input_org.show()
+
+    target = np.squeeze(target.cpu().numpy(), axis=0)
+    target_img = np.zeros((*target.shape, 3), dtype=np.uint8)
+
+    for y in range(target.shape[0]):
+        for x in range(target.shape[1]):
+            target_img[y, x, :] = cityscapes_settings.CLASS_RGB_COLOR[target[y, x]]
+
+    target_img = Image.fromarray(target_img).convert('RGB')
+
+    target_img.show()
+
+    blended = Image.blend(input_org, target_img, alpha=0.3)
+    blended.show()
+    input()
 
 
-def method_conf_mat(pred, target, num_classes): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
-    assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)!"
-    assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions!"
 
-    def _np_batch_bincount(arr, minlength):
-        return np.apply_along_axis(lambda x: np.bincount(x, minlength=minlength), axis=1, arr=arr)
 
-    pred = pred.reshape(pred.shape[0], -1)
-    target = target.reshape(target.shape[0], -1)
 
-    # Bincount of class detections
-    bincount_pred = _np_batch_bincount(pred, minlength=num_classes)
-    bincount_target = _np_batch_bincount(target, minlength=num_classes)
+#import numpy as np
 
-    # Category matrix
-    category_matrix = target * num_classes + pred
-    bincount_category_matrix = _np_batch_bincount(category_matrix, minlength=(num_classes*num_classes))
+#def method_conf_mat(pred, target, num_classes): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
+#    assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)!"
+#    assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions!"
 
-    # Confusion matrix
-    confusion_matrix = bincount_category_matrix.reshape((-1, num_classes, num_classes))
+#    def _np_batch_bincount(arr, minlength):
+#        return np.apply_along_axis(lambda x: np.bincount(x, minlength=minlength), axis=1, arr=arr)
 
-    intersection = np.diagonal(confusion_matrix, axis1=1, axis2=2)
-    union = bincount_pred + bincount_target - intersection
+#    pred = pred.reshape(pred.shape[0], -1)
+#    target = target.reshape(target.shape[0], -1)
 
-    with np.errstate(divide='warn', invalid='warn'): # NOTE: We ignore division by zero
-        return np.nanmean((intersection / union), axis=1)
+#    # Bincount of class detections
+#    bincount_pred = _np_batch_bincount(pred, minlength=num_classes)
+#    bincount_target = _np_batch_bincount(target, minlength=num_classes)
 
-def method_hist(pred, target, num_classes):
-    assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)!"
-    assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions!"
+#    # Category matrix
+#    category_matrix = target * num_classes + pred
+#    bincount_category_matrix = _np_batch_bincount(category_matrix, minlength=(num_classes*num_classes))
 
-    def _np_batch_histogram(arr, bins, range_):
-        return np.apply_along_axis(lambda x: np.histogram(x, bins=bins, range=range_)[0], axis=1, arr=arr)
+#    # Confusion matrix
+#    confusion_matrix = bincount_category_matrix.reshape((-1, num_classes, num_classes))
 
-    pred = pred.reshape(pred.shape[0], -1) + 1
-    target = target.reshape(target.shape[0], -1) + 1
+#    intersection = np.diagonal(confusion_matrix, axis1=1, axis2=2)
+#    union = bincount_pred + bincount_target - intersection
 
-    intersection = pred * (pred == target)
+#    with np.errstate(divide='warn', invalid='warn'): # NOTE: We ignore division by zero
+#        return np.nanmean((intersection / union), axis=1)
 
-    area_intersection = _np_batch_histogram(intersection, bins=num_classes, range_=(1, num_classes))
+#def method_hist(pred, target, num_classes):
+#    assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)!"
+#    assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions!"
 
-    area_pred = _np_batch_histogram(pred, bins=num_classes, range_=(1, num_classes))
-    area_target = _np_batch_histogram(target, bins=num_classes, range_=(1, num_classes))
-    area_union = area_pred + area_target - area_intersection
+#    def _np_batch_histogram(arr, bins, range_):
+#        return np.apply_along_axis(lambda x: np.histogram(x, bins=bins, range=range_)[0], axis=1, arr=arr)
 
-    with np.errstate(divide='warn', invalid='warn'): # NOTE: We ignore division by zero
-        return np.nanmean((area_intersection / area_union), axis=1)
+#    pred = pred.reshape(pred.shape[0], -1) + 1
+#    target = target.reshape(target.shape[0], -1) + 1
 
-batch_size = 2
-num_classes = 4
+#    intersection = pred * (pred == target)
 
-pred = np.random.randint(1, num_classes, (batch_size, 3, 4))
-target = np.random.randint(1, num_classes, (batch_size, 3, 4))
+#    area_intersection = _np_batch_histogram(intersection, bins=num_classes, range_=(1, num_classes))
 
-print(method_conf_mat(pred, target, num_classes))
-print(method_hist(pred, target, num_classes))
+#    area_pred = _np_batch_histogram(pred, bins=num_classes, range_=(1, num_classes))
+#    area_target = _np_batch_histogram(target, bins=num_classes, range_=(1, num_classes))
+#    area_union = area_pred + area_target - area_intersection
+
+#    with np.errstate(divide='warn', invalid='warn'): # NOTE: We ignore division by zero
+#        return np.nanmean((area_intersection / area_union), axis=1)
+
+#batch_size = 2
+#num_classes = 4
+
+##pred = np.random.randint(1, num_classes, (batch_size, 3, 4))
+##target = np.random.randint(1, num_classes, (batch_size, 3, 4))
+
+#pred = np.zeros((batch_size, 3, 4), dtype=np.int32)
+#target = np.zeros((batch_size, 3, 4), dtype=np.int32)
+
+#pred[0, 1, 1] = 1
+
+#print(method_conf_mat(pred, target, num_classes))
+#print(method_hist(pred, target, num_classes))

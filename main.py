@@ -468,17 +468,22 @@ def main(command,
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
             raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'. Please refer to 'README.md'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
 
-        with t.no_grad():
-            test_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                                  lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                                  lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-            test_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                                  split=dataset_split,
-                                                  mode='fine',
-                                                  target_type='semantic',
-                                                  transforms=test_joint_transforms)
-            test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        test_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                              lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                              lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+        test_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+                                              split=dataset_split,
+                                              mode='fine',
+                                              target_type='semantic',
+                                              transforms=test_joint_transforms)
+        test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
+        with t.no_grad(), tqdm(total=len(test_loader),
+                               desc='BENCHMARKING',
+                               colour='yellow',
+                               position=0,
+                               leave=False,
+                               bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
             # Run benchmark
             miou = mIoU(num_classes=cityscapes_settings.DATASET_NUM_CLASSES)
             for ((input_scaled, _), target) in test_loader:
@@ -486,15 +491,17 @@ def main(command,
 
                 # Prepare pred and target for metrices to process
                 SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
-                target = target.detach().cpu().numpy()
-
                 pred = np.argmax(SSSR_output, axis=1)               # Convert probabilities across dimensions to class label in one 2-D grid
+                target = target.detach().cpu().numpy()
 
                 # Calculate mIoU for this batch
                 miou.update(pred, target)
 
-        total_miou = miou()
-        tqdm.write(INFO("Computed mIoU: {0:.2f}".format(total_miou)))
+                progressbar.update()
+
+        total_miou = miou() * 100.0
+        tqdm.write("-------- RESULTS --------")
+        tqdm.write("mIoU %: {0:.2f}".format(total_miou))
 
         # Save benchmark result to output directories in 'benchmark.txt'
         os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
@@ -503,7 +510,7 @@ def main(command,
             benchmark_file.write("Benchmarking results on Cityscapes dataset's {:s} split\n\n".format(dataset_split))
             benchmark_file.write("On: {:s}\n".format(process_start_timestamp.strftime("%c")))
             benchmark_file.write("Weights file: {:s}\n\n".format(weights))
-            benchmark_file.write("mIoU: {:.3f}".format(total_miou))
+            benchmark_file.write("mIoU %: {:.2f}".format(total_miou))
 
 
 

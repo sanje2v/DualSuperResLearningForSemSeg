@@ -5,13 +5,24 @@
 ![picture](demo/stage1_output.png)
 
 # To knows
-'.weights' file is to be used for inference and ONLY contains weights for Stage 1 layers.
-'.checkpoint' file contains, on top of Stage 1 weights, other information such as optimizer state, epochs etc that can be used to resume training. 'Inspect checkpoint' discussed below shows how to print these values.
+* '.weights' file is to be used for inference and ONLY contains weights for Stage 1 layers except for 'final.weights' produced at the end of training a stage. This file contains weights for all the network layers introduced in that stage and below it.
+* '.checkpoint' file contains, on top of Stage 1 weights, other information such as optimizer state, epochs etc that can be used to resume training. 'Inspect checkpoint' discussed below shows how to print these values.
+
+# Requirements
+The following software versions were used for testing the code in this repo. Other version combination of software might also work but have not been tested on.
+* Python 3.7
+* PyTorch 1.7
+* CUDA 11.1
+* Conda
+* Microsoft Visual Studio 2019 (if using .sln file)
+* Required python libraries are in 'requirements.txt'
+
 
 # Getting started
 Before training or benchmarking, please download 'gtFine.zip' and 'leftImg8bit.zip' for [**Cityscapes dataset**](https://www.cityscapes-dataset.com/) and unzip them under './datasets/Cityscapes/data'.
 
 All commands are invoked via `main.py` script. For instance to train, you would use something like `python main.py --train [...]`. Use `python main.py --help` to view all supported actions.
+
 
 # Commands
 ## Training
@@ -20,10 +31,13 @@ Perform training on the '*train*' split of **Cityscapes dataset**.
 *Example usage:*
 `python main.py train --stage 1 --description "Stage 1 training" --epochs 200 --batch_size 6 --device gpu --checkpoint_history 40 --num_workers 4 --val_interval 5` 
 
-## Resume training
-Resume training from an interrupted session using checkpoint file (that have .checkpoints extension and are autosaved under './weights/checkpoints').
 
+## Resume training
+Resume training from an interrupted session using checkpoint file (that have '.checkpoint' extension and are autosaved under './weights/checkpoints').
+
+*Example usage:*
 `python main.py resume_train --checkpoint ./weights/checkpoints/epoch50.checkpoint`
+
 
 ## Testing
 Perform inference on a specified image file with specified weights.
@@ -33,17 +47,20 @@ Perform inference on a specified image file with specified weights.
 
 The result of the inference is saved in `./outputs/<image_filename>.png`.
 
+
 ## Weights pruning
 Weights trained in stage 2 and 3 will have weights for parts of model not needed for inference. So, weights pruning will remove all these weights.
 
 *Example usage:*
 `python main.py prune_weights --src_weights ./weights/stage3/checkpoints/epoch50.checkpoint --dest_weights ./output/inference.weights`
 
+
 ## Inspect checkpoint
 View the keys and dictionary pairs in the specified checkpoint file.
 
 *Example usage:*
 `python main.py inspect_checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint
+
 
 ## Benchmark
 You can run benchmarking for semantic segmentation using specified weights/checkpoint on specified split of dataset.
@@ -53,9 +70,10 @@ You can run benchmarking for semantic segmentation using specified weights/check
 
 The result of the benchmark is saved in `./outputs/benchmark.txt`.
 
-# License
 
-Any part of this source code should ONLY be reused for research purposes. This repo contains some modified source code from PyTorch.
+# License
+>Any part of this source code should ONLY be reused for research purposes. This repo contains some modified source code from PyTorch and other sources who have been credited in source file using them.
+
 
 # References
 >Wang, L., Li, D., Zhu, Y., Tian, L. and Shan, Y., 2020. Dual Super-Resolution Learning for Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition  (pp. 3774-3783)
