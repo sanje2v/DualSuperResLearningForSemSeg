@@ -282,7 +282,9 @@ def main(command,
                                     weight_decay=weights_decay)
             if command == 'resume_train':
                 optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
-                starting_epoch = checkpoint_dict['epoch'] if command == 'resume_train' else 0
+                starting_epoch = checkpoint_dict['epoch']
+            else:
+                starting_epoch = 0
 
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
@@ -498,6 +500,9 @@ def main(command,
                 SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
                 pred = np.argmax(SSSR_output, axis=1)               # Convert probabilities across dimensions to class label in one 2-D grid
                 target = target.detach().cpu().numpy()
+
+                # Remove invalid background class from evaluation
+                np.place(pred, (target == cityscapes_settings.IGNORE_CLASS_LABEL), cityscapes_settings.IGNORE_CLASS_LABEL)
 
                 # Calculate mIoU for this batch
                 miou.update(pred, target)
