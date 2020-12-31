@@ -485,9 +485,14 @@ def main(command,
                                leave=False,
                                bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
             # Run benchmark
+            CE_avg_loss = AverageMeter('CE Avg. Loss')
             miou = mIoU(num_classes=cityscapes_settings.DATASET_NUM_CLASSES)
             for ((input_scaled, _), target) in test_loader:
                 SSSR_output, _, _, _ = model.forward(input_scaled.to(target_device))
+
+                # Calculate Cross entropy error
+                CE_loss = t.nn.CrossEntropyLoss()(SSSR_output.cpu(), target)
+                CE_avg_loss.update(CE_loss.item(), batch_size)
 
                 # Prepare pred and target for metrices to process
                 SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
@@ -501,6 +506,7 @@ def main(command,
 
         total_miou = miou() * 100.0
         tqdm.write("-------- RESULTS --------")
+        tqdm.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
         tqdm.write("mIoU %: {0:.2f}".format(total_miou))
 
         # Save benchmark result to output directories in 'benchmark.txt'
@@ -510,6 +516,7 @@ def main(command,
             benchmark_file.write("Benchmarking results on Cityscapes dataset's {:s} split\n\n".format(dataset_split))
             benchmark_file.write("On: {:s}\n".format(process_start_timestamp.strftime("%c")))
             benchmark_file.write("Weights file: {:s}\n\n".format(weights))
+            benchmark_file.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
             benchmark_file.write("mIoU %: {:.2f}".format(total_miou))
 
 

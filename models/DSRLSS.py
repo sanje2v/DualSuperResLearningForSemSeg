@@ -121,21 +121,20 @@ class DSRLSS(t.nn.Module):
                                                         mid_channels=256,
                                                         out_channels=cityscapes_settings.DATASET_NUM_CLASSES)
 
-        if self.train:
-            if self.stage > 1:
-                # Single Image Super-Resolution (SISR)
-                self.SISR_decoder = DSRLSS._define_SISR_decoder(in_channels=(256+48),
-                                                                out_channels=consts.NUM_RGB_CHANNELS,
-                                                                upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
+        if self.stage > 1:
+            # Single Image Super-Resolution (SISR)
+            self.SISR_decoder = DSRLSS._define_SISR_decoder(in_channels=(256+48),
+                                                            out_channels=consts.NUM_RGB_CHANNELS,
+                                                            upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
 
             if self.stage > 2:
                 # Feature transform module for SSSR
                 self.SSSR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
-                                                                                   out_channels=1)
+                                                                                    out_channels=1)
 
                 # Feature transform module for SISR
                 self.SISR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
-                                                                                   out_channels=1)
+                                                                                    out_channels=1)
 
 
     def forward(self, x):
@@ -154,16 +153,15 @@ class DSRLSS(t.nn.Module):
         SISR_output = None
         SSSR_transform_output = None
         SISR_transform_output = None
-        if self.training:
-            if self.stage > 1:
-                # Single Image Super-Resolution (SISR) decoder
-                SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)
+        if self.stage > 1:
+            # Single Image Super-Resolution (SISR) decoder
+            SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)
 
-                if self.stage > 2:
-                    # Feature transform module for SSSR
-                    SSSR_transform_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
+            if self.stage > 2:
+                # Feature transform module for SSSR
+                SSSR_transform_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
 
-                    # Feature transform module for SISR
-                    SISR_transform_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
+                # Feature transform module for SISR
+                SISR_transform_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
 
         return SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output
