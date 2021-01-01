@@ -64,7 +64,7 @@ class ResNet101(t.nn.Module):
                                                            model_dir,
                                                            progress=True,
                                                            file_name='resnet101_pretrained.pth')
-        self.load_state_dict(pretrained_state_dict, strict=True)
+        self.load_state_dict(pretrained_state_dict, strict=False)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         norm_layer = self._norm_layer
