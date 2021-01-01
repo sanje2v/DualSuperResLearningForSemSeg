@@ -11,7 +11,8 @@ MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 PARAMS_FILE = 'params.txt'
-WEIGHTS_DIR = os.path.join('weights', 'stage{stage}')
+WEIGHTS_ROOT_DIR = 'weights'
+WEIGHTS_DIR = os.path.join(WEIGHTS_ROOT_DIR, 'stage{stage}')
 FINAL_WEIGHTS_FILE  = 'final.weights'
 CHECKPOINTS_DIR = os.path.join(WEIGHTS_DIR, 'checkpoints')
 CHECKPOINT_FILE = 'epoch{epoch}.checkpoint'

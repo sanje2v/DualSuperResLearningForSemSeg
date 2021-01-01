@@ -215,7 +215,9 @@ def main(command,
                 model.load_state_dict(load_weights_or_checkpoint(init_weights)['model_state_dict'], strict=False)
 
             # Load checkpoint from previous stage, if not the first stage
-            if stage > 1:
+            if stage == 1:
+                model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
+            else:
                 weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
                 model.load_state_dict(weights_dict['model_state_dict'], strict=False)
 

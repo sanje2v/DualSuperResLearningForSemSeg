@@ -137,6 +137,10 @@ class DSRLSS(t.nn.Module):
                                                                                     out_channels=1)
 
 
+    def initialize_with_pretrained_weights(self, model_dir):
+        self.feature_extractor['backbone'].initialize_with_pretrained_weights(model_dir)
+
+
     def forward(self, x):
         # Extract features
         backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)

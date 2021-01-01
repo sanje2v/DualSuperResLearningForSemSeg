@@ -4,6 +4,7 @@ import torchvision as tv
 
 # NOTE: This code is derivative of 'ResNet' class of PyTorch implemention at 'torchvision.models.resnet'
 class ResNet101(t.nn.Module):
+    PRETRAINED_WEIGHTS_URL = "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth"
 
     def __init__(self, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
@@ -57,6 +58,13 @@ class ResNet101(t.nn.Module):
                     t.nn.init.constant_(m.bn3.weight, 0)
                 elif isinstance(m, tv.models.BasicBlock):
                     t.nn.init.constant_(m.bn2.weight, 0)
+
+    def initialize_with_pretrained_weights(self, model_dir):
+        pretrained_state_dict = t.utils.model_zoo.load_url(self.PRETRAINED_WEIGHTS_URL,
+                                                           model_dir,
+                                                           progress=True,
+                                                           file_name='resnet101_pretrained.pth')
+        self.load_state_dict(pretrained_state_dict, strict=True)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         norm_layer = self._norm_layer
