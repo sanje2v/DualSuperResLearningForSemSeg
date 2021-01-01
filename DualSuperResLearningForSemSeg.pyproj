@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>46aa911d-f2c5-4be4-a319-11599f9e7db8</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>test.py</StartupFile>
+    <StartupFile>main.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>benchmark --weights C:\Users\Sanjeev\Desktop\Downloaded\stage1\epoch160.checkpoint --num_workers 0</CommandLineArguments>
+    <CommandLineArguments>train --stage 1 --epochs 200 --description "Stage 1 training with 200 epochs" --batch_size 2 --num_workers 2 --device gpu --val_interval 5 --checkpoint_interval 5</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>

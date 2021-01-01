@@ -64,7 +64,8 @@ class ResNet101(t.nn.Module):
                                                            model_dir,
                                                            progress=True,
                                                            file_name='resnet101_pretrained.pth')
-        self.load_state_dict(pretrained_state_dict, strict=False)
+        missing_keys, _ = self.load_state_dict(pretrained_state_dict, strict=False)
+        assert len(missing_keys) == 0, "BUG CHECK: Pretrained weights from model zoo for ResNet101 has missing keys: {}".format(missing_keys)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         norm_layer = self._norm_layer
