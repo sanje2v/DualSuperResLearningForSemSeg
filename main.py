@@ -24,7 +24,16 @@ from datasets.Cityscapes import settings as cityscapes_settings
 
 
 
-def do_train_val(do_train: bool, model, device, batch_size, stage, data_loader, w1=None, w2=None, optimizer=None, scheduler=None):
+def do_train_val(do_train: bool,
+                 model,
+                 device,
+                 batch_size,
+                 stage,
+                 data_loader,
+                 w1,
+                 w2,
+                 optimizer=None,
+                 scheduler=None):
     # Set model to either training or testing mode
     model.train(mode=do_train)
 
@@ -355,7 +364,9 @@ def main(command,
                                                 device=target_device,
                                                 batch_size=batch_size,
                                                 stage=stage,
-                                                data_loader=val_loader)
+                                                data_loader=val_loader,
+                                                w1=w1,
+                                                w2=w2)
 
                     # Log validation losses for this epoch to TensorBoard
                     val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
@@ -440,12 +451,16 @@ def main(command,
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
 
         def prettyInnerDictToStr(key, inner_dict):
-            if key == 'model_state_dict':   # We only print keys for this dict as it is too big to print
-                ret = '{{{0:s}}}'.format(', '.join(inner_dict.keys()))
-            else:
-                ret = str(inner_dict)
+            output = []
+            for key in inner_dict:
+                if isinstance(inner_dict[key], dict):
+                    output.append(prettyInnerDictToStr(inner_dict[key]))
+                elif isinstance(inner_dict[key], np.ndarray):
+                    output.append(key)
+                else:
+                    output.append(str(inner_dict[key]))
 
-            return '\n{0:s}'.format(ret)
+            return "{:s}".format(', '.format(output))
 
         tqdm.write('\n')
         for key in checkpoint_dict:
