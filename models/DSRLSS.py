@@ -130,11 +130,11 @@ class DSRLSS(t.nn.Module):
             if self.stage > 2:
                 # Feature transform module for SSSR
                 self.SSSR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
-                                                                                    out_channels=1)
+                                                                                   out_channels=1)
 
                 # Feature transform module for SISR
                 self.SISR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
-                                                                                    out_channels=1)
+                                                                                   out_channels=1)
 
 
     def initialize_with_pretrained_weights(self, model_dir):

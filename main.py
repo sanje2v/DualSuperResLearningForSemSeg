@@ -92,7 +92,7 @@ def do_train_val(do_train: bool,
                 MSE_avg_loss.update(MSE_loss, batch_size)
                 if stage > 2:
                     FA_avg_loss.update(FA_loss, batch_size)
-                Avg_loss.update(loss, batch_size)
+            Avg_loss.update(loss, batch_size)
 
             # Add loss information to progress bar
             log_string = []
@@ -189,6 +189,7 @@ def main(command,
         w1 = checkpoint_dict['w1']
         w2 = checkpoint_dict['w2']
         description = checkpoint_dict['description']
+        best_validation_dict = checkpoint_dict['best_validation_dict']
 
     if device:
         # Device to perform calculation in
@@ -198,6 +199,9 @@ def main(command,
 
     if command in ['train', 'resume_train']:
         # Training and Validation on dataset mode
+
+        if command == 'train':
+            best_validation_dict = {}
 
         # Prevent system from entering sleep state so that long training session is not interrupted
         if prevent_system_sleep():
@@ -308,11 +312,13 @@ def main(command,
             log_string = "\n################################# Stage {:d} training STARTED #################################".format(stage)
             tqdm.write(log_string)
 
-            for epoch in range((starting_epoch + 1), (epochs + 1)):
+            epochs += 1     # NOTE: We use index starting from 1 for epochs
+            for epoch in range((starting_epoch + 1), epochs):
                 log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
                 tqdm.write(log_string)
 
                 # Do training for this epoch
+                training_epoch_begin_timestamp = datetime.now()
                 CE_train_avg_loss, \
                 MSE_train_avg_loss, \
                 FA_train_avg_loss, \
@@ -326,6 +332,10 @@ def main(command,
                                               w2=w2,
                                               optimizer=optimizer,
                                               scheduler=scheduler)
+
+                # Print estimated time for training completion
+                training_epoch_timetaken = (datetime.now() - training_epoch_begin_timestamp).total_seconds() / timedelta(hours=1).total_seconds()
+                tqdm.write("Training to complete in: {:.2f} hr(s)".format(training_epoch_timetaken * (epochs - epoch)))
 
                 # Log training losses for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss.avg, epoch)
@@ -344,8 +354,8 @@ def main(command,
                                     device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
                                     checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
                                     learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
-                                    description=description, epoch=epoch, ce_train_avg_loss=CE_train_avg_loss.avg, model_state_dict=model.state_dict(),
-                                    optimizer_state_dict=optimizer.state_dict())
+                                    description=description, epoch=epoch, best_validation_dict=best_validation_dict, ce_train_avg_loss=CE_train_avg_loss.avg,
+                                    model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
                     tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                                  settings.CHECKPOINTS_DIR.format(stage=stage))))
 
@@ -369,6 +379,18 @@ def main(command,
                                                 data_loader=val_loader,
                                                 w1=w1,
                                                 w2=w2)
+
+                    # Save epoch number and total error of best validation and then checkpoint
+                    if not best_validation_dict or Avg_val_loss.avg < best_validation_dict['loss']:
+                        best_validation_dict['epoch'] = epoch
+                        best_validation_dict['loss'] = Avg_val_loss.avg
+
+                        save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch='_bestval'),
+                                        device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
+                                        checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
+                                        learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
+                                        description=description, epoch=epoch, best_validation_dict=best_validation_dict, ce_train_avg_loss=CE_train_avg_loss.avg,
+                                        model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
 
                     # Log validation losses for this epoch to TensorBoard
                     val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
@@ -452,23 +474,19 @@ def main(command,
     elif command == 'inspect_checkpoint':
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
 
-        def prettyInnerDictToStr(key, inner_dict):
+        def prettyDictToStr(dict_):
             output = []
-            for key in inner_dict:
-                if isinstance(inner_dict[key], dict):
-                    output.append(prettyInnerDictToStr(inner_dict[key]))
-                elif isinstance(inner_dict[key], np.ndarray):
+            for key in dict_:
+                if isinstance(dict_[key], dict):
+                    output.append(prettyDictToStr(dict_[key]))
+                elif isinstance(dict_[key], (np.ndarray, t.Tensor, list)):
                     output.append(key)
                 else:
-                    output.append(str(inner_dict[key]))
+                    output.append("{0:s}: {1}".format(key, str(dict_[key])))
 
-            return "{:s}".format(', '.format(output))
+            return "{{{:s}}}".format(', '.join(output))
 
-        tqdm.write('\n')
-        for key in checkpoint_dict:
-            tqdm.write("{0:s}: {1}".format(key,
-                                           str(checkpoint_dict[key]) if not isinstance(checkpoint_dict[key], dict) else\
-                                               prettyInnerDictToStr(key, checkpoint_dict[key])))
+        tqdm.write(prettyDictToStr(checkpoint_dict))
 
     elif command == 'benchmark':
         # Run benchmark using specified weights and display results

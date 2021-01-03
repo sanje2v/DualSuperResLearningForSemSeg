@@ -12,8 +12,9 @@
 The following software versions were used for testing the code in this repo. Other version combination of software might also work but have not been tested on.
 * Python 3.7
 * PyTorch 1.7
-* CUDA 11.1
-* Conda
+* TorchVision 0.8.1
+* CUDA 11.0
+* Conda 4.9.2
 * Microsoft Visual Studio 2019 (if using .sln file)
 * Required python libraries are in 'requirements.txt'
 

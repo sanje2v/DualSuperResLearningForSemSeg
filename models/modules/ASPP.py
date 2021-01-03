@@ -20,12 +20,12 @@ class ASPP(t.nn.Module):
                                                  t.nn.BatchNorm2d(num_features=out_channels),
                                                  t.nn.ReLU(inplace=True),
                                                  t.nn.Dropout(p=0.2)))
+        self.avg = t.nn.AdaptiveAvgPool2d((1, 1))
 
     def forward(self, x):
         branch_outputs = [self.branches[i](x) for i in range(4)]
 
-        global_feature = t.mean(x, dim=2, keepdim=True)
-        global_feature = t.mean(x, dim=3, keepdim=True)
+        global_feature = self.avg(x)
         global_feature = self.branches[4](global_feature)
         global_feature = t.nn.functional.interpolate(global_feature, size=x.size()[-2:], mode='bilinear', align_corners=True)
         branch_outputs.append(global_feature)
