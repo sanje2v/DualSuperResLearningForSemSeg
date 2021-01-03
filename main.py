@@ -478,11 +478,14 @@ def main(command,
             output = []
             for key in dict_:
                 if isinstance(dict_[key], dict):
-                    output.append(prettyDictToStr(dict_[key]))
+                    output.append("{0}: {1}".format(key, prettyDictToStr(dict_[key])))
                 elif isinstance(dict_[key], (np.ndarray, t.Tensor, list)):
                     output.append(key)
                 else:
-                    output.append("{0:s}: {1}".format(key, str(dict_[key])))
+                    if isinstance(dict_[key], str):
+                        output.append("{0:s}: \"{1}\"".format(key, str(dict_[key])))
+                    else:
+                        output.append("{0:s}: {1}".format(key, str(dict_[key])))
 
             return "{{{:s}}}".format(', '.join(output))
 
