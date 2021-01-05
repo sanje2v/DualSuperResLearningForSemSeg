@@ -72,7 +72,7 @@ def do_train_val(do_train: bool,
             assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()),\
                 FATAL("SISSR network output contains 'NaN' values and so cannot continue. Exiting.")
 
-            CE_loss = t.nn.CrossEntropyLoss()(SSSR_output, target)
+            CE_loss = t.nn.CrossEntropyLoss(ignore_index=cityscapes_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
             FA_loss = (w2 * FALoss()(SSSR_transform_output, SISR_transform_output)) if stage > 2 else t.tensor(0., requires_grad=False)
             loss = CE_loss + MSE_loss + FA_loss
@@ -208,7 +208,7 @@ def main(command,
             else:
                 # Load checkpoint from previous stage, if not the first stage
                 if stage == 1:
-                    tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialized network before training."))
+                    tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
                     model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
                 else:
                     prev_weights_filename = os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
@@ -227,7 +227,8 @@ def main(command,
         if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
             raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
 
-        train_joint_transforms = JointCompose([JointRandomCrop(min_scale=1.0, max_scale=3.5),
+        train_joint_transforms = JointCompose([JointRandomRotate(degrees=15.0, fill=(0, 0)),
+                                               JointRandomCrop(min_scale=1.0, max_scale=3.5),
                                                JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                                lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)(img), seg),
                                                JointHFlip(),
