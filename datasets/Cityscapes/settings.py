@@ -2,8 +2,8 @@ from .consts import NUM_RGB_CHANNELS
 
 # Ref: https://github.com/inferno-pytorch/inferno/blob/master/inferno/io/box/cityscapes.py
 DATASET_NUM_CLASSES = 19 + 1    # +1 for background class
-DATASET_MEAN = [0.28689554, 0.32513303, 0.28389177]
-DATASET_STD = [0.18696375, 0.19017339, 0.18720214]
+DATASET_MEAN = [0.485, 0.456, 0.406]
+DATASET_STD = [0.229, 0.224, 0.225]
 # Maps labels to class indices
 IGNORE_CLASS_LABEL = 19
 LABEL_MAPPING_DICT =\
@@ -19,7 +19,7 @@ assert min(LABEL_MAPPING_DICT.values()) == 0 and max(LABEL_MAPPING_DICT.values()
     "'LABEL_MAPPING_DICT' must contain mappings starting from 0 to {:d}!".format(DATASET_NUM_CLASSES - 1)
 # Provides colors to each class to visualize segmentation maps
 # NOTE: Color values from 'https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py'
-    #       for all the classes where 'ignoreInEval' is False in 'labels' variable.
+#       for all the classes where 'ignoreInEval' is False in 'labels' variable.
 CLASS_RGB_COLOR =\
 [
     (128, 64, 128), (244, 35, 232), (70, 70, 70), (102, 102, 156), (190, 153, 153),\

@@ -12,11 +12,10 @@ class DSRLSS(t.nn.Module):
     MODEL_OUTPUT_SIZE = (1024, 2048)
 
     @staticmethod
-    def _define_feature_extractor(num_classes, in_channels, out_channels1, out_channels2):
+    def _define_feature_extractor(in_channels, out_channels1, out_channels2):
         feature_extractor_modules = \
         {
-            'backbone': ResNet101(num_classes=num_classes,
-                                  replace_stride_with_dilation=[False, False, True]),
+            'backbone': ResNet101(replace_stride_with_dilation=[False, False, True]),
             'aspp': ASPP(in_channels=in_channels, out_channels=out_channels1, rate=1),
             'upsample_sub': t.nn.Sequential(t.nn.Dropout(p=0.5),
                                             t.nn.UpsamplingBilinear2d(scale_factor=4.0)),
@@ -24,7 +23,7 @@ class DSRLSS(t.nn.Module):
                                                          out_channels=out_channels2,
                                                          kernel_size=1,
                                                          padding=0,
-                                                         bias=True),
+                                                         bias=False),
                                              t.nn.BatchNorm2d(num_features=out_channels2),
                                              t.nn.ReLU(inplace=True))
         }
@@ -39,7 +38,7 @@ class DSRLSS(t.nn.Module):
                                                     out_channels=mid_channels,
                                                     kernel_size=3,
                                                     padding=1,
-                                                    bias=True),
+                                                    bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
                                         t.nn.ReLU(inplace=True),
                                         t.nn.Dropout(p=0.5),
@@ -47,32 +46,30 @@ class DSRLSS(t.nn.Module):
                                                     out_channels=mid_channels,
                                                     kernel_size=3,
                                                     padding=1,
-                                                    bias=True),
+                                                    bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
                                         t.nn.ReLU(inplace=True),
-                                        t.nn.Dropout(p=0.1)),
-            'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1),
+                                        t.nn.Dropout(p=0.2)),
+            'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1, bias=True),
             # NOTE: Replaced this 'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
             # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 8 times.
             'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(scale_factor=2.0),     # NOTE: To reduce parameters, we use upsamling here
-                                               t.nn.Dropout(p=0.2),
+                                               t.nn.Dropout(p=0.5),
                                                t.nn.ConvTranspose2d(in_channels=out_channels,
                                                                     out_channels=out_channels,
                                                                     kernel_size=2,
                                                                     stride=2,
                                                                     padding=0,
-                                                                    bias=True),
+                                                                    bias=False),
                                                t.nn.BatchNorm2d(num_features=out_channels),
                                                t.nn.ReLU(inplace=True),
-                                               t.nn.Dropout(p=0.2),
+                                               t.nn.Dropout(p=0.5),
                                                t.nn.ConvTranspose2d(in_channels=out_channels,
                                                                     out_channels=out_channels,
                                                                     kernel_size=2,
                                                                     stride=2,
                                                                     padding=0,
-                                                                    bias=True),
-                                               t.nn.BatchNorm2d(num_features=out_channels),
-                                               t.nn.ReLU(inplace=True))
+                                                                    bias=True))
         }
 
         return t.nn.ModuleDict(decoder_modules)
@@ -85,7 +82,8 @@ class DSRLSS(t.nn.Module):
                                            out_channels=(out_channels * (upscale_factor ** 2)),
                                            kernel_size=3,
                                            stride=1,
-                                           padding=1),
+                                           padding=1,
+                                           bias=True),
                                t.nn.PixelShuffle(upscale_factor=upscale_factor))
 
     @staticmethod
@@ -95,7 +93,7 @@ class DSRLSS(t.nn.Module):
                                            kernel_size=1,
                                            stride=8,
                                            padding=0,
-                                           bias=True),
+                                           bias=False),
                                t.nn.BatchNorm2d(num_features=out_channels),
                                t.nn.ReLU(inplace=True))
 
@@ -110,8 +108,7 @@ class DSRLSS(t.nn.Module):
         self.stage = stage
 
         # Feature extractor
-        self.feature_extractor = DSRLSS._define_feature_extractor(num_classes=cityscapes_settings.DATASET_NUM_CLASSES,
-                                                                  in_channels=2048,
+        self.feature_extractor = DSRLSS._define_feature_extractor(in_channels=2048,
                                                                   out_channels1=256,
                                                                   out_channels2=48)
 
@@ -137,17 +134,17 @@ class DSRLSS(t.nn.Module):
                                                                                    out_channels=1)
 
 
-    def initialize_with_pretrained_weights(self, model_dir):
-        self.feature_extractor['backbone'].initialize_with_pretrained_weights(model_dir)
+    def initialize_with_pretrained_weights(self, weights_dir):
+        self.feature_extractor['backbone'].initialize_with_pretrained_weights(weights_dir)
 
 
     def forward(self, x):
         # Extract features
         backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
         aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)
-        upsample_sub = self.feature_extractor['upsample_sub'](aspp_features)            # NOTE: Output size (B, 256, 128, 256)
-        shortcut_conv = self.feature_extractor['shortcut_conv'](lowlevel_features)      # NOTE: Output size (B, 48, 128, 256)
-        cat_features = t.cat([upsample_sub, shortcut_conv], dim=1)                      # NOTE: Output size (B, 304, 128, 256)
+        aspp_features = self.feature_extractor['upsample_sub'](aspp_features)           # NOTE: Output size (B, 256, 128, 256)
+        lowlevel_features = self.feature_extractor['shortcut_conv'](lowlevel_features)  # NOTE: Output size (B, 48, 128, 256)
+        cat_features = t.cat([aspp_features, lowlevel_features], dim=1)                 # NOTE: Output size (B, 304, 128, 256)
 
         # Semantic Segmentation Super Resolution (SSSR) decoder
         SSSR_output = self.SSSR_decoder['cat_conv'](cat_features)                       # NOTE: Output size (B, 256, 128, 256)

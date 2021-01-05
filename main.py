@@ -5,6 +5,7 @@ import shutil
 import argparse
 import termcolor
 from tqdm.auto import tqdm as tqdm
+from pydoc import locate as str2type
 import numpy as np
 import torch as t
 import torchvision as tv
@@ -121,30 +122,9 @@ def do_train_val(do_train: bool,
     return CE_avg_loss, MSE_avg_loss, FA_avg_loss, Avg_loss
 
 
-def write_params_file(filename, *list_params):
-    with open(filename, mode='w') as params_file:
-        for params_str in list_params:
-            if params_str:
-                params_file.write(params_str)
-                params_file.write('\n')     # NOTE: '\n' here automatically converts it to newline for the current platform
-
-
-def load_checkpoint_or_weights(filename):
-    return t.load(filename)
-
-
-def save_checkpoint(dir, filename, **checkpoint_vars):
-    os.makedirs(dir, exist_ok=True)
-    t.save(checkpoint_vars, os.path.join(dir, filename))
-
-
-def save_weights(dir, filename, model):
-    os.makedirs(dir, exist_ok=True)
-    t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
-
-
 def main(command,
          device=None,
+         disable_cudnn_benchmark=None,
          num_workers=None,
          val_interval=None,
          checkpoint=None,
@@ -165,7 +145,10 @@ def main(command,
          weights=None,
          src_weights=None,
          dest_weights=None,
-         dataset_split=None):
+         dataset_split=None,
+         key=None,
+         value=None,
+         typeof=None):
 
     # Time keeper
     process_start_timestamp = datetime.now()
@@ -174,6 +157,7 @@ def main(command,
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
 
         device = checkpoint_dict['device']
+        disable_cudnn_benchmark = checkpoint_dict['disable_cudnn_benchmark']
         num_workers = checkpoint_dict['num_workers']
         val_interval = checkpoint_dict['val_interval']
         checkpoint_interval = checkpoint_dict['checkpoint_interval']
@@ -193,8 +177,12 @@ def main(command,
 
     if device:
         # Device to perform calculation in
-        if device.startswith(('gpu', 'cuda')) and not t.cuda.is_available():
-            raise Exception("CUDA is not available to use GPU!")
+        if isCUDAdevice(device):
+           if not t.cuda.is_available():
+               raise Exception("CUDA is not available to use for accelerated computing!")
+
+           if disable_cudnn_benchmark is not None:
+               t.backends.cudnn.benchmark = not disable_cudnn_benchmark
         target_device = t.device('cuda' if device == 'gpu' else device)
 
     if command in ['train', 'resume_train']:
@@ -217,13 +205,19 @@ def main(command,
             # Load initial weight, if any
             if init_weights:
                 model.load_state_dict(load_weights_or_checkpoint(init_weights)['model_state_dict'], strict=False)
-
-            # Load checkpoint from previous stage, if not the first stage
-            if stage == 1:
-                model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
             else:
-                weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
-                model.load_state_dict(weights_dict['model_state_dict'], strict=False)
+                # Load checkpoint from previous stage, if not the first stage
+                if stage == 1:
+                    tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialized network before training."))
+                    model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
+                else:
+                    prev_weights_filename = os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
+                    if os.path.isfile(prev_weights_filename):
+                        tqdm.write(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
+                        weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
+                        model.load_state_dict(weights_dict['model_state_dict'], strict=False)
+                    else:
+                        tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
 
         # Copy the model into 'target_device' memory
         model = model.to(target_device)
@@ -239,25 +233,35 @@ def main(command,
                                                JointHFlip(),
                                                # CAUTION: 'kernel_size' should be > 0 and odd integer
                                                lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
-                                               lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+                                               lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
                                                lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
                                                lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-        val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                             lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                             lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-
         train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                                split='train',
                                                mode='fine',
                                                target_type='semantic',
                                                transforms=train_joint_transforms)
-        train_loader = t.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        train_loader = t.utils.data.DataLoader(train_dataset,
+                                               batch_size=batch_size,
+                                               shuffle=True,
+                                               num_workers=num_workers,
+                                               pin_memory=isCUDAdevice(device),
+                                               drop_last=True)
+
+        val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                             lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                             lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
         val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                              split='val',
                                              mode='fine',
                                              target_type='semantic',
                                              transforms=val_joint_transforms)
-        val_loader = t.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        val_loader = t.utils.data.DataLoader(val_dataset,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             num_workers=num_workers,
+                                             pin_memory=isCUDAdevice(device),
+                                             drop_last=False)
 
         # Make sure proper log directories exist
         train_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='train')
@@ -269,6 +273,7 @@ def main(command,
         write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
                           "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
                           "Device: {:s}".format(device),
+                          "Disable CUDNN benchmark mode: {:}".format(disable_cudnn_benchmark) if isCUDAdevice(device) else None,
                           "No. of workers: {:d}".format(num_workers),
                           "Validation interval: {:d}".format(val_interval),
                           "Checkpoint interval: {:d}".format(checkpoint_interval),
@@ -300,6 +305,7 @@ def main(command,
                 starting_epoch = checkpoint_dict['epoch']
             else:
                 starting_epoch = 0
+                epochs += 1     # NOTE: We use index starting from 1 for epochs
 
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
@@ -312,7 +318,6 @@ def main(command,
             log_string = "\n################################# Stage {:d} training STARTED #################################".format(stage)
             tqdm.write(log_string)
 
-            epochs += 1     # NOTE: We use index starting from 1 for epochs
             for epoch in range((starting_epoch + 1), epochs):
                 log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
                 tqdm.write(log_string)
@@ -491,6 +496,11 @@ def main(command,
 
         tqdm.write(prettyDictToStr(checkpoint_dict))
 
+    elif command == 'edit_checkpoint':
+        checkpoint_dict = load_checkpoint_or_weights(checkpoint)
+        checkpoint_dict[key] = str2type(typeof)(value)
+        save_checkpoint(*os.path.split(checkpoint), **checkpoint_dict)
+
     elif command == 'benchmark':
         # Run benchmark using specified weights and display results
 
@@ -540,7 +550,7 @@ def main(command,
                 target = target.detach().cpu().numpy()
 
                 # Remove invalid background class from evaluation
-                np.place(pred, (target == cityscapes_settings.IGNORE_CLASS_LABEL), cityscapes_settings.IGNORE_CLASS_LABEL)
+                pred[target == cityscapes_settings.IGNORE_CLASS_LABEL] = cityscapes_settings.IGNORE_CLASS_LABEL
 
                 # Calculate mIoU for this batch
                 miou.update(pred, target)
@@ -577,6 +587,7 @@ if __name__ == '__main__':
         # Training arguments
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
         train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        train_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         train_parser.add_argument('--num_workers', default=4, type=int, help="No. of workers for data loader")
         train_parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
         train_parser.add_argument('--checkpoint_interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
@@ -602,6 +613,7 @@ if __name__ == '__main__':
         test_parser.add_argument('--image_file', type=str, required=True, help="Run evaluation on a image file using trained weights")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        test_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
@@ -612,11 +624,19 @@ if __name__ == '__main__':
         inspect_checkpoint_parser = command_parser.add_parser('inspect_checkpoint', help="View contents of a checkpoint file")
         inspect_checkpoint_parser.add_argument('--checkpoint', required=True, type=str, help="Checkpoint file to view contents of")
 
+        # Edit checkpoint arguments
+        edit_checkpoint_parser = command_parser.add_parser('edit_checkpoint', help="Edit contents of a checkpoint file")
+        edit_checkpoint_parser.add_argument('--checkpoint', required=True, type=str, help="Checkpoint file to edit contents of")
+        edit_checkpoint_parser.add_argument('--key', required=True, type=str, help="Specify key of the dictionary of checkpoint to edit")
+        edit_checkpoint_parser.add_argument('--value', required=True, type=str, help="Specify value of the key to edit")
+        edit_checkpoint_parser.add_argument('--typeof', required=True, type=str, help="Specify type of the specified value")
+
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
         benchmark_parser.add_argument('--dataset_split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
         benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        benchmark_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         benchmark_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
         benchmark_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for benchmarking")
 
@@ -626,7 +646,10 @@ if __name__ == '__main__':
         # Validate arguments according to mode
         if args.command == 'train':
             if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+
+            if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
+                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
 
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
@@ -665,11 +688,6 @@ if __name__ == '__main__':
             if not args.poly_power > 0.:
                 raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
 
-            if args.stage > 1:
-                prev_weights_file = os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage-1), settings.FINAL_WEIGHTS_FILE)
-                if not os.path.isfile(prev_weights_file):
-                    raise argparse.ArgumentTypeError("Couldn't find weights file '{0:s}' from previous stage {1:d}!".format(prev_weights_file, args.stage-1))
-
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
                 answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
@@ -697,7 +715,10 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
 
             if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+
+            if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
+                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
 
         elif args.command == 'purne_weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
@@ -718,6 +739,13 @@ if __name__ == '__main__':
             if not os.path.isfile(args.checkpoint):
                 raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
 
+        elif args.command == 'edit_checkpoint':
+            if not hasExtension(args.checkpoint, '.checkpoint'):
+                raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file!")
+
+            if not os.path.isfile(args.checkpoint):
+                raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
+
         elif args.command == 'benchmark':
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
@@ -726,7 +754,10 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("Couldn't find the specified weights file '{:s}'!".format(args.weights))
 
             if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argsparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+
+            if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
+                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
 
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
@@ -735,7 +766,7 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
         # Do action in 'command'
-        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'benchmark'],\
+        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
             "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
         main(**args.__dict__)
 

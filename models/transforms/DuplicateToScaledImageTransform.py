@@ -1,14 +1,15 @@
 import torch as t
 import torch.nn.functional as F
 
-class DuplicateToScaledImageTransform:
+class DuplicateToScaledImageTransform(t.nn.Module):
     """Duplcate a ``Tensor Image`` to a new tensor image of scaled size.
     """
 
     def __init__(self, new_size):
+        super().__init__()
         self.new_size = new_size
 
-    def __call__(self, pic_tensor):
+    def forward(self, pic_tensor):
         """
         Args:
             pic_tensor (Tensor Image): Image tensor to scale.

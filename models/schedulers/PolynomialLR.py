@@ -20,7 +20,7 @@ class PolynomialLR(_LRScheduler):
         self.power = power
         super().__init__(optimizer, last_epoch, verbose)
 
-    def __calc_poly_decayed_lr(self, initial_lr):
+    def _calc_poly_decayed_lr(self, initial_lr):
         return (initial_lr - self.end_learning_rate)\
                 * ((1. - self.last_epoch / self.max_decay_steps) ** self.power)\
                 + self.end_learning_rate
@@ -30,5 +30,5 @@ class PolynomialLR(_LRScheduler):
             warnings.warn("To get the last learning rate computed by the scheduler, "
                           "please use 'get_last_lr()'.", UserWarning)
 
-        return [self.__calc_poly_decayed_lr(base_lr) for base_lr in self.base_lrs] \
+        return [self._calc_poly_decayed_lr(base_lr) for base_lr in self.base_lrs] \
                 if self.last_epoch > 0 else self.base_lrs

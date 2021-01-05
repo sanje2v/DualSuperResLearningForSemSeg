@@ -16,11 +16,11 @@ class ASPP(t.nn.Module):
         ]
         self.branches = t.nn.ModuleList()
         for branch_param in branch_params:
-            self.branches.append(t.nn.Sequential(t.nn.Conv2d(**branch_param, bias=True),
+            self.branches.append(t.nn.Sequential(t.nn.Conv2d(**branch_param, bias=False),
                                                  t.nn.BatchNorm2d(num_features=out_channels),
                                                  t.nn.ReLU(inplace=True),
                                                  t.nn.Dropout(p=0.2)))
-        self.avg = t.nn.AdaptiveAvgPool2d((1, 1))
+        self.avg = t.nn.AdaptiveAvgPool2d(output_size=(1, 1))
 
     def forward(self, x):
         branch_outputs = [self.branches[i](x) for i in range(4)]

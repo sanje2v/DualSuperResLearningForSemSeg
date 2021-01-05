@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>46aa911d-f2c5-4be4-a319-11599f9e7db8</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>main.py</StartupFile>
+    <StartupFile>scratchpad.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -91,16 +91,17 @@
     <Compile Include="models\transforms\JointRandomCrop.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\transforms\JointRandomRotate.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\transforms\__init__.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="scratchpad.py" />
     <Compile Include="settings.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="test.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="utils.py">

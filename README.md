@@ -4,16 +4,17 @@
 
 ![picture](demo/stage1_output.png)
 
-# To knows
+# Things to know
 * '.weights' file is to be used for inference and ONLY contains weights for Stage 1 layers except for 'final.weights' produced at the end of training a stage. This file contains weights for all the network layers introduced in that stage and below it.
 * '.checkpoint' file contains, on top of Stage 1 weights, other information such as optimizer state, epochs etc that can be used to resume training. 'Inspect checkpoint' discussed below shows how to print these values.
+* '.cpkt' file is weights just like '.weights' file downloaded from model zoo but doesn't contain any dictionary.
 
 # Requirements
 The following software versions were used for testing the code in this repo. Other version combination of software might also work but have not been tested on.
 * Python 3.7
 * PyTorch 1.7
 * TorchVision 0.8.1
-* CUDA 11.0
+* CUDA 11.1
 * Conda 4.9.2
 * Microsoft Visual Studio 2019 (if using .sln file)
 * Required python libraries are in 'requirements.txt'
@@ -41,7 +42,7 @@ Resume training from an interrupted session using checkpoint file (that have '.c
 
 
 ## Testing
-Perform inference on a specified image file with specified weights.
+Perform inference on a specified image file with specified weights and shows result as well as saves it to a file.
 
 *Example usage:*
 `python main.py test --image_file ~/Pictures/input.jpg --weights ./weights/stage3/final.weights --device gpu`
@@ -57,10 +58,17 @@ Weights trained in stage 2 and 3 will have weights for parts of model not needed
 
 
 ## Inspect checkpoint
-View the keys and dictionary pairs in the specified checkpoint file.
+View the keys and values dictionary pairs in the specified checkpoint file.
 
 *Example usage:*
-`python main.py inspect_checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint
+`python main.py inspect_checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint`
+
+
+## Edit checkpoint
+Edit dictionary of the specified checkpoint file.
+
+*Example usage:*
+`python main.py edit_checkpoint --checkpoint ./weights/stage2/test.checkpoint --key device --value cpu --typeof str`
 
 
 ## Benchmark
