@@ -784,8 +784,8 @@ if __name__ == '__main__':
         # Do action in 'command'
         assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
             "BUG CHECK: Unimplemented 'args.command': {:s}.".format(args.command)
-        with t.autograd.profiler.profile(enabled=do_profiling, use_cuda=isCUDAdevice(args.device), record_shapes=True, profile_memory=True) as profiler_:
-            g_profiler = profiler_
+        with t.autograd.profiler.profile(enabled=do_profiling, use_cuda=isCUDAdevice(args.device), record_shapes=True, profile_memory=True) as profiler:
+            g_profiler = profiler
             main(**args.__dict__)
 
 
