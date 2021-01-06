@@ -173,62 +173,62 @@ timeit(False)
 
 
 
-import torch as t
-import torchvision as tv
-from models.transforms import *
-import numpy as np
-import settings
-from models import DSRLSS
-import datasets.Cityscapes.settings as cityscapes_settings
-from PIL import Image
+#import torch as t
+#import torchvision as tv
+#from models.transforms import *
+#import numpy as np
+#import settings
+#from models import DSRLSS
+#import datasets.Cityscapes.settings as cityscapes_settings
+#from PIL import Image
 
-train_joint_transforms = JointCompose([JointRandomRotate(15.0, (0, 0)),
-                                       JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                       JointRandomCrop(min_scale=1.0, max_scale=3.5),
-                                       lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
-                                       JointHFlip(),
-                                       # CAUTION: 'kernel_size' should be > 0 and odd integer
-                                       lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
-                                       lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
-                                       lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                    #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
-train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                        split='train',
-                                        mode='fine',
-                                        target_type='semantic',
-                                        transforms=train_joint_transforms)
-train_loader = t.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0)
-val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                        split='val',
-                                        mode='fine',
-                                        target_type='semantic',
-                                        transforms=val_joint_transforms)
-val_loader = t.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
+#train_joint_transforms = JointCompose([JointRandomRotate(15.0, (0, 0)),
+#                                       JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+#                                       JointRandomCrop(min_scale=1.0, max_scale=3.5),
+#                                       lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+#                                       JointHFlip(),
+#                                       # CAUTION: 'kernel_size' should be > 0 and odd integer
+#                                       lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
+#                                       lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+#                                       lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+#val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+#                                    #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+#                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+#train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+#                                        split='train',
+#                                        mode='fine',
+#                                        target_type='semantic',
+#                                        transforms=train_joint_transforms)
+#train_loader = t.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0)
+#val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
+#                                        split='val',
+#                                        mode='fine',
+#                                        target_type='semantic',
+#                                        transforms=val_joint_transforms)
+#val_loader = t.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0)
 
-data_loader = train_loader
-for ((input_scaled, input_org), target) in data_loader:
-    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
-    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
+#data_loader = train_loader
+#for ((input_scaled, input_org), target) in data_loader:
+#    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
+#    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
 
-    input_org.show()
+#    input_org.show()
 
-    target = np.squeeze(target.cpu().numpy(), axis=0)
-    target_img = np.zeros((*target.shape, 3), dtype=np.uint8)
+#    target = np.squeeze(target.cpu().numpy(), axis=0)
+#    target_img = np.zeros((*target.shape, 3), dtype=np.uint8)
 
-    for y in range(target.shape[0]):
-        for x in range(target.shape[1]):
-            target_img[y, x, :] = cityscapes_settings.CLASS_RGB_COLOR[target[y, x]]
+#    for y in range(target.shape[0]):
+#        for x in range(target.shape[1]):
+#            target_img[y, x, :] = cityscapes_settings.CLASS_RGB_COLOR[target[y, x]]
 
-    target_img = Image.fromarray(target_img).convert('RGB')
+#    target_img = Image.fromarray(target_img).convert('RGB')
 
-    target_img.show()
+#    target_img.show()
 
-    blended = Image.blend(input_org, target_img, alpha=0.3)
-    blended.show()
-    input()
+#    blended = Image.blend(input_org, target_img, alpha=0.3)
+#    blended.show()
+#    input()
 
 
 
@@ -298,3 +298,46 @@ for ((input_scaled, input_org), target) in data_loader:
 
 #print(method_conf_mat(pred, target, num_classes))
 #print(method_hist(pred, target, num_classes))
+
+
+
+
+import numpy as np
+import torch as t
+
+def batch_intersection_union(predict, target, num_class, labeled):
+    predict = predict * labeled.long()
+    intersection = predict * (predict == target).long()
+
+    area_inter = t.histc(intersection.float(), bins=num_class, max=num_class, min=1)
+    area_pred = t.histc(predict.float(), bins=num_class, max=num_class, min=1)
+    area_lab = t.histc(target.float(), bins=num_class, max=num_class, min=1)
+    area_union = area_pred + area_lab - area_inter
+    assert (area_inter <= area_union).all(), "Intersection area should be smaller than Union area"
+    return area_inter.cpu().numpy().sum() / area_union.cpu().numpy().sum()
+
+def batch_intersection_union2(pred, target, num_class, valid_labels_mask): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
+        assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
+        assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
+
+        pred = pred + 1
+        target = target + 1
+
+        pred = pred * valid_labels_mask
+        inter = pred * (pred == target)
+
+        area_pred, _ = np.histogram(pred, bins=num_class, range=(1, num_class))
+        area_inter, _ = np.histogram(inter, bins=num_class, range=(1, num_class))
+        area_target, _ = np.histogram(target, bins=num_class, range=(1, num_class))
+        area_union = area_pred + area_target - area_inter
+
+        assert (area_inter <= area_union).all(), "BUG CHECK: Intersection area should always be less than or equal to union area."
+
+        return (area_inter.sum() / area_union.sum())
+
+pred = np.array([[[0, 1, 3, 3, 4, 5], [2, 3, 1, 1, 3, 4]]], dtype=np.int64)
+target = np.array([[[0, 1, 2, 3, 4, 255], [2, 255, 1, 4, 255, 4]]], dtype=np.int64)
+labeled = np.array(target != 255, dtype=np.bool)
+
+print(batch_intersection_union(t.from_numpy(pred+1), t.from_numpy(target+1), 6, t.from_numpy(labeled)))
+print(batch_intersection_union2(pred, target, 6, labeled))

@@ -12,13 +12,12 @@ class Accuracy:
         assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
         assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
 
-        pred = pred.reshape(pred.shape[0], -1)
-        target = target.reshape(target.shape[0], -1)
+        pixels_correct = ((pred == target) * valid_labels_mask).sum()
+        total_pixels = valid_labels_mask.sum()
 
-        pixels_correct = np.sum((pred == target) * valid_labels_mask, axis=0, keepdims=True)
-        total_pixels = np.sum(valid_labels_mask, axis=0, keepdims=True)
+        assert pixels_correct <= total_pixels, "BUG CHECK: 'pixels_correct' cannot be be greater than 'total_pixels'."
 
-        self.mean_accuracy.append(np.mean(pixels_correct/total_pixels))
+        self.mean_accuracy.append(pixels_correct / total_pixels)
 
     def __call__(self):
         return np.mean(self.mean_accuracy)    # CAUTION: We use 'nanmean' to ignore any Nan values

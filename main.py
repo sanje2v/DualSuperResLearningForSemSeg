@@ -138,6 +138,7 @@ def main(command,
          batch_size=None,
          epochs=None,
          learning_rate=None,
+         end_learning_rate=None,
          momentum=None,
          weights_decay=None,
          poly_power=None,
@@ -170,6 +171,7 @@ def main(command,
         batch_size = checkpoint_dict['batch_size']
         epochs = checkpoint_dict['epochs']
         learning_rate = checkpoint_dict['learning_rate']
+        end_learning_rate = checkpoint_dict['end_learning_rate']
         momentum = checkpoint_dict['momentum']
         weights_decay = checkpoint_dict['weights_decay']
         poly_power = checkpoint_dict['poly_power']
@@ -288,6 +290,7 @@ def main(command,
                           "Batch size: {:d}".format(batch_size),
                           "Epochs: {:d}".format(epochs),
                           "Learning rate: {:f}".format(learning_rate),
+                          "End learning rate: {:f}".format(end_learning_rate),
                           "Momentum: {:f}".format(momentum),
                           "Weights decay: {:f}".format(weights_decay),
                           "Poly power: {:f}".format(poly_power),
@@ -314,7 +317,7 @@ def main(command,
 
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
-                                     end_learning_rate=0.001,
+                                     end_learning_rate=end_learning_rate,
                                      power=poly_power,
                                      last_epoch=(starting_epoch-1))
 
@@ -557,7 +560,7 @@ def main(command,
                 target = target.detach().cpu().numpy()
 
                 # Remove invalid background class from evaluation
-                valid_labels_mask = target[target != cityscapes_settings.IGNORE_CLASS_LABEL]
+                valid_labels_mask = (target != cityscapes_settings.IGNORE_CLASS_LABEL)    # Boolean mask
 
                 # Calculate metrices for this batch
                 miou.update(pred, target, valid_labels_mask)
@@ -608,7 +611,8 @@ if __name__ == '__main__':
         train_parser.add_argument('--init_weights', default=None, type=str, help="Load initial weights file for model")
         train_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for training and testing")
         train_parser.add_argument('--epochs', required=True, type=int, help="No. of epochs to train")
-        train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate")
+        train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate to begin training with")
+        train_parser.add_argument('--end_learning_rate', type=float, default=0.001, help="End learning rate for the last epoch")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
         train_parser.add_argument('--weights_decay', type=float, default=0.0005, help="Weights decay for SGD")
         train_parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")

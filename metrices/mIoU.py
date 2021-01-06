@@ -4,6 +4,10 @@ import numpy as np
 
 class mIoU:
     @staticmethod
+    def _np_batch_take(arr, mask):
+        return np.apply_along_axis(lambda x: x[mask], axis=1, arr=arr)
+
+    @staticmethod
     def _np_batch_bincount(arr, minlength):
         return np.apply_along_axis(lambda x: np.bincount(x, minlength=minlength), axis=1, arr=arr)
 
@@ -19,27 +23,21 @@ class mIoU:
         assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
         assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
 
-        pred = pred.reshape(pred.shape[0], -1)
-        target = target.reshape(target.shape[0], -1)
+        pred = pred + 1
+        target = target + 1
 
-        # Bincount of class detections
-        bincount_pred = mIoU._np_batch_bincount(pred, minlength=self.num_classes)
-        bincount_target = mIoU._np_batch_bincount(target, minlength=self.num_classes)
+        pred = pred * valid_labels_mask
+        inter = pred * (pred == target)
 
-        # Category matrix
-        category_matrix = target * self.num_classes + pred
-        bincount_category_matrix = mIoU._np_batch_bincount(category_matrix, minlength=(self.num_classes*self.num_classes))
+        area_pred, _ = np.histogram(pred, bins=self.num_classes, range=(1, self.num_classes))
+        area_inter, _ = np.histogram(inter, bins=self.num_classes, range=(1, self.num_classes))
+        area_target, _ = np.histogram(target, bins=self.num_classes, range=(1, self.num_classes))
+        area_union = area_pred + area_target - area_inter
 
-        # Confusion matrix
-        confusion_matrix = bincount_category_matrix.reshape((-1, self.num_classes, self.num_classes))
-
-        intersection = np.diagonal(confusion_matrix, axis1=1, axis2=2)
-        union = bincount_pred + bincount_target - intersection
-
-        assert intersection <= union, "BUG CHECK: Intersection area should always be less than or equal to union area."
+        assert (area_inter <= area_union).all(), "BUG CHECK: Intersection area should always be less than or equal to union area."
 
         with np.errstate(divide='ignore', invalid='ignore'): # NOTE: We ignore division by zero
-            self.miou.append(np.nanmean(intersection / union))
+            self.miou.append(area_inter.sum() / area_union.sum())
 
     def __call__(self):
         return np.nanmean(self.miou)    # CAUTION: We use 'nanmean' to ignore any Nan values
