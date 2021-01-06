@@ -15,7 +15,7 @@ class mIoU:
     def reset(self):
         self.miou = []
 
-    def update(self, pred, target): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
+    def update(self, pred, target, valid_labels_mask): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
         assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
         assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
 

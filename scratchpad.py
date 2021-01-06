@@ -1,3 +1,10 @@
+#######################################################################################
+##
+## This script is used to just test out various functions of different Python modules
+##
+#######################################################################################
+
+
 from datetime import datetime
 _starttime = datetime.now()
 def timeit(do_print=True):

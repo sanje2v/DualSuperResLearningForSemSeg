@@ -17,7 +17,7 @@ from models import DSRLSS
 from models.schedulers import PolynomialLR
 from models.losses import FALoss
 from models.transforms import *
-from metrices import AverageMeter, mIoU
+from metrices import AverageMeter, mIoU, Accuracy
 from utils import *
 import consts
 import settings
@@ -153,7 +153,6 @@ def main(command,
          key=None,
          value=None,
          typeof=None):
-    global profiler
 
     # Time keeper
     process_start_timestamp = datetime.now()
@@ -543,6 +542,7 @@ def main(command,
             # Run benchmark
             CE_avg_loss = AverageMeter('CE Avg. Loss')
             miou = mIoU(num_classes=cityscapes_settings.DATASET_NUM_CLASSES)
+            accuracy_mean = Accuracy()
             for ((input_scaled, _), target) in test_loader:
                 SSSR_output, _, _, _ = model.forward(input_scaled.to(target_device))
                 SSSR_output = SSSR_output.detach().cpu()        # Bring back result to CPU memory
@@ -557,17 +557,20 @@ def main(command,
                 target = target.detach().cpu().numpy()
 
                 # Remove invalid background class from evaluation
-                pred[target == cityscapes_settings.IGNORE_CLASS_LABEL] = cityscapes_settings.IGNORE_CLASS_LABEL
+                valid_labels_mask = target[target != cityscapes_settings.IGNORE_CLASS_LABEL]
 
-                # Calculate mIoU for this batch
-                miou.update(pred, target)
+                # Calculate metrices for this batch
+                miou.update(pred, target, valid_labels_mask)
+                accuracy_mean.update(pred, target, valid_labels_mask)
 
                 progressbar.update()
 
         total_miou = miou() * 100.0
+        total_mean_accuracy = accuracy_mean() * 100.0
         tqdm.write("-------- RESULTS --------")
         tqdm.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
-        tqdm.write("mIoU %: {0:.2f}".format(total_miou))
+        tqdm.write("mIoU %: {:.2f}".format(total_miou))
+        tqdm.write("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
 
         # Save benchmark result to output directories in 'benchmark.txt'
         os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
@@ -578,6 +581,7 @@ def main(command,
             benchmark_file.write("Weights file: {:s}\n\n".format(weights))
             benchmark_file.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
             benchmark_file.write("mIoU %: {:.2f}".format(total_miou))
+            benchmark_file.write("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
 
 
 
@@ -784,6 +788,7 @@ if __name__ == '__main__':
         # Do action in 'command'
         assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
             "BUG CHECK: Unimplemented 'args.command': {:s}.".format(args.command)
+
         with t.autograd.profiler.profile(enabled=do_profiling, use_cuda=isCUDAdevice(args.device), record_shapes=True, profile_memory=True) as profiler:
             g_profiler = profiler
             main(**args.__dict__)
