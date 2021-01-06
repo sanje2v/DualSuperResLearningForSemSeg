@@ -7,7 +7,7 @@ import numpy as np
 class JointImageAndLabelTensor(t.nn.Module):
     @staticmethod
     def _PILToClassLabelLongTensor(seg, label_mapping_dict):
-        assert isinstance(seg, Image.Image), "BUG CHECK: 'seg' parameter must be a PIL image"
+        assert isinstance(seg, Image.Image), "BUG CHECK: 'seg' parameter must be a PIL image."
 
         mapping_func = np.vectorize(lambda x: np.int64(label_mapping_dict[x]))
 
@@ -15,7 +15,7 @@ class JointImageAndLabelTensor(t.nn.Module):
 
 
     def __init__(self, label_mapping_dict):
-        assert isinstance(label_mapping_dict, dict), "BUG CHECK: 'label_mapping_dict' should be a dict"
+        assert isinstance(label_mapping_dict, dict), "BUG CHECK: 'label_mapping_dict' should be a dict."
         super().__init__()
 
         self.label_mapping_dict = label_mapping_dict

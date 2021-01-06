@@ -16,8 +16,8 @@ class mIoU:
         self.miou = []
 
     def update(self, pred, target): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
-        assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)!"
-        assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions!"
+        assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
+        assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
 
         pred = pred.reshape(pred.shape[0], -1)
         target = target.reshape(target.shape[0], -1)
@@ -35,6 +35,8 @@ class mIoU:
 
         intersection = np.diagonal(confusion_matrix, axis1=1, axis2=2)
         union = bincount_pred + bincount_target - intersection
+
+        assert intersection <= union, "BUG CHECK: Intersection area should always be less than or equal to union area."
 
         with np.errstate(divide='ignore', invalid='ignore'): # NOTE: We ignore division by zero
             self.miou.append(np.nanmean(intersection / union))

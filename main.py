@@ -24,6 +24,9 @@ import settings
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
+# GLOBALS
+g_profiler = None
+
 
 def do_train_val(do_train: bool,
                  model,
@@ -125,6 +128,7 @@ def do_train_val(do_train: bool,
 def main(command,
          device=None,
          disable_cudnn_benchmark=None,
+         profile=None,
          num_workers=None,
          val_interval=None,
          checkpoint=None,
@@ -149,6 +153,7 @@ def main(command,
          key=None,
          value=None,
          typeof=None):
+    global profiler
 
     # Time keeper
     process_start_timestamp = datetime.now()
@@ -446,7 +451,7 @@ def main(command,
                 SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
 
             # Prepare output image consisting of model input and segmentation image side-by-side (hence '* 2')
-            output_image = np.empty((DSRLSS.MODEL_OUTPUT_SIZE[0], DSRLSS.MODEL_OUTPUT_SIZE[1] * 2, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
+            output_image = np.zeros((DSRLSS.MODEL_OUTPUT_SIZE[0], DSRLSS.MODEL_OUTPUT_SIZE[1] * 2, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
             argmax_map = np.argmax(SSSR_output, axis=0)
 
             for y in range(DSRLSS.MODEL_OUTPUT_SIZE[0]):
@@ -540,13 +545,14 @@ def main(command,
             miou = mIoU(num_classes=cityscapes_settings.DATASET_NUM_CLASSES)
             for ((input_scaled, _), target) in test_loader:
                 SSSR_output, _, _, _ = model.forward(input_scaled.to(target_device))
+                SSSR_output = SSSR_output.detach().cpu()        # Bring back result to CPU memory
 
                 # Calculate Cross entropy error
-                CE_loss = t.nn.CrossEntropyLoss()(SSSR_output.cpu(), target)
+                CE_loss = t.nn.CrossEntropyLoss(ignore_index=cityscapes_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
                 CE_avg_loss.update(CE_loss.item(), batch_size)
 
                 # Prepare pred and target for metrices to process
-                SSSR_output = SSSR_output.detach().cpu().numpy()    # Bring back result to CPU memory
+                SSSR_output = SSSR_output.numpy()
                 pred = np.argmax(SSSR_output, axis=1)               # Convert probabilities across dimensions to class label in one 2-D grid
                 target = target.detach().cpu().numpy()
 
@@ -581,6 +587,7 @@ if __name__ == '__main__':
     assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
         FATAL("This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION))
 
+    do_profiling = False
     try:
         parser = argparse.ArgumentParser(description="Implementation of 'Dual Super Resolution Learning For Semantic Segmentation', CVPR 2020 paper.")
         command_parser = parser.add_subparsers(title='commands', dest='command', required=True)
@@ -589,6 +596,7 @@ if __name__ == '__main__':
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
         train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         train_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
+        train_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         train_parser.add_argument('--num_workers', default=4, type=int, help="No. of workers for data loader")
         train_parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
         train_parser.add_argument('--checkpoint_interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
@@ -615,6 +623,7 @@ if __name__ == '__main__':
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
+        test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
@@ -698,6 +707,9 @@ if __name__ == '__main__':
                 else:
                     sys.exit(0)
 
+            # Enable profiler if '--profile' option is specified
+            do_profiling = args.profile
+
         elif args.command == 'resume_train':
             if not hasExtension(args.checkpoint, '.checkpoint'):
                 raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file as the whole model and optimizer states needs to be loaded!")
@@ -720,6 +732,9 @@ if __name__ == '__main__':
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
                 raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
+
+            # Enable profiler if '--profile' option is specified
+            do_profiling = args.profile
 
         elif args.command == 'purne_weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
@@ -768,14 +783,23 @@ if __name__ == '__main__':
 
         # Do action in 'command'
         assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
-            "BUG CHECK: Unimplemented 'args.command': {:s}!".format(args.command)
-        main(**args.__dict__)
+            "BUG CHECK: Unimplemented 'args.command': {:s}.".format(args.command)
+        with t.autograd.profiler.profile(enabled=do_profiling, use_cuda=isCUDAdevice(args.device), record_shapes=True, profile_memory=True) as profiler_:
+            g_profiler = profiler_
+            main(**args.__dict__)
 
 
     except KeyboardInterrupt:
-        tqdm.write(INFO("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
+        tqdm.write(CAUTION("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
 
     except argparse.ArgumentTypeError as ex:
         tqdm.write(FATAL("{:s}".format(str(ex))))
         tqdm.write('\n')
         parser.print_usage()
+
+    finally:
+        # If a profiler is active, stop it and save results to disk
+        if g_profiler:
+            profiling_filename = os.path.join(settings.OUTPUTS_DIR, settings.PROFILING_FILE)
+            g_profiler.export_chrome_trace(profiling_filename)
+            tqdm.write(INFO("Profiling output has been saved to: {:s}.".format(profiling_filename)))

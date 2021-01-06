@@ -35,13 +35,15 @@ class JointRandomRotate(t.nn.Module):
         """
         Args:
             img (PIL Image or Tensor): Image to be rotated.
+            seg (PIL Image or Tensor): Seg to be rotated with.
 
         Returns:
             PIL Image or Tensor: Rotated image.
+            PIL Image or Tensor: Rotated segmentation.
         """
-        assert any(isinstance(img, x) and isinstance(seg, x) for x in [Image.Image, t.Tensor]), "BUG CHECK: 'img' and 'seg' must be of the same type"
-        assert (isinstance(x, (Image.Image, t.Tensor)) for x in [img, seg]), "BUG CHECK: 'img' and 'seg' must be of either Image or Tensor type"
-        assert (img.shape[-2:] == seg.shape[-2:]) if isinstance(img, t.Tensor) else (img.size[-2:] == seg.size[-2:]), "BUG CHECK: 'img' and 'seg' must be of same dimensions"
+        assert any(isinstance(img, x) and isinstance(seg, x) for x in [Image.Image, t.Tensor]), "BUG CHECK: 'img' and 'seg' must be of the same type."
+        assert (isinstance(x, (Image.Image, t.Tensor)) for x in [img, seg]), "BUG CHECK: 'img' and 'seg' must be of either Image or Tensor type."
+        assert (img.shape[-2:] == seg.shape[-2:]) if isinstance(img, t.Tensor) else (img.size[-2:] == seg.size[-2:]), "BUG CHECK: 'img' and 'seg' must be of same dimensions."
 
         angle = self.get_params(self.degrees)
 

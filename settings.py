@@ -18,6 +18,7 @@ CHECKPOINTS_DIR = os.path.join(WEIGHTS_DIR, 'checkpoints')
 CHECKPOINT_FILE = 'epoch{epoch}.checkpoint'
 LOGS_DIR = os.path.join('logs', 'stage{stage}', '{mode}')
 OUTPUTS_DIR = 'outputs'
+PROFILING_FILE = 'profiling.json'
 DATASETS_DIR = 'datasets'
 
 CITYSCAPES_DATASET_DATA_DIR = os.path.join(DATASETS_DIR, 'Cityscapes', 'data')

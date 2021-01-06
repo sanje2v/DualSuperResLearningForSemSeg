@@ -6,17 +6,17 @@ import numpy as np
 
 class JointRandomCrop(t.nn.Module):
     def __init__(self, min_scale, max_scale):
-        assert min_scale >= 1.0, "BUG CHECK: 'min_scale' must be greater than or equal to 1.0"
-        assert min_scale < max_scale, "BUG CHECK: 'min_scale' must be greater than 'max_scale'"
+        assert min_scale >= 1.0, "BUG CHECK: 'min_scale' must be greater than or equal to 1.0."
+        assert min_scale < max_scale, "BUG CHECK: 'min_scale' must be greater than 'max_scale'."
         super().__init__()
 
         self.min_scale = min_scale
         self.max_scale = max_scale
 
     def forward(self, img, seg):
-        assert any(isinstance(img, x) and isinstance(seg, x) for x in [Image.Image, t.Tensor]), "BUG CHECK: 'img' and 'seg' must be of the same type"
-        assert (isinstance(x, (Image.Image, t.Tensor)) for x in [img, seg]), "BUG CHECK: 'img' and 'seg' must be of either Image or Tensor type"
-        assert (img.shape[-2:] == seg.shape[-2:]) if isinstance(img, t.Tensor) else (img.size[-2:] == seg.size[-2:]), "BUG CHECK: 'img' and 'seg' must be of same dimensions"
+        assert any(isinstance(img, x) and isinstance(seg, x) for x in [Image.Image, t.Tensor]), "BUG CHECK: 'img' and 'seg' must be of the same type."
+        assert (isinstance(x, (Image.Image, t.Tensor)) for x in [img, seg]), "BUG CHECK: 'img' and 'seg' must be of either Image or Tensor type."
+        assert (img.shape[-2:] == seg.shape[-2:]) if isinstance(img, t.Tensor) else (img.size[-2:] == seg.size[-2:]), "BUG CHECK: 'img' and 'seg' must be of same dimensions."
 
         # Get the default random number generator from numpy
         random_gen = np.random.default_rng()

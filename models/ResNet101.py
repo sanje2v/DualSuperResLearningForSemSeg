@@ -24,9 +24,8 @@ class ResNet101(t.nn.Module):
             # each element in the tuple indicates if we should replace
             # the 2x2 stride with a dilated convolution instead
             replace_stride_with_dilation = [False, False, False]
-        if len(replace_stride_with_dilation) != 3:
-            raise ValueError("replace_stride_with_dilation should be None "
-                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+        assert len(replace_stride_with_dilation) == 3, "replace_stride_with_dilation should be None or a 3-element tuple, got {}".format(replace_stride_with_dilation)
+
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = t.nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
@@ -65,7 +64,7 @@ class ResNet101(t.nn.Module):
                                                            progress=True,
                                                            file_name='resnet101_pretrained.pth')
         missing_keys, _ = self.load_state_dict(pretrained_state_dict, strict=False)
-        assert len(missing_keys) == 0, "BUG CHECK: Pretrained weights from model zoo for ResNet101 has missing keys: {}".format(missing_keys)
+        assert len(missing_keys) == 0, "BUG CHECK: Pretrained weights from model zoo for ResNet101 has missing keys: {}.".format(missing_keys)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         norm_layer = self._norm_layer

@@ -24,7 +24,7 @@ CLASS_RGB_COLOR =\
     (128, 64, 128), (244, 35, 232), (70, 70, 70), (102, 102, 156), (190, 153, 153),\
     (153, 153, 153), (250, 170, 30), (220, 220, 0), (107, 142, 35), (152, 251, 152),\
     (70, 130, 180), (220, 20, 60), (255, 0, 0), (0, 0, 142), (0, 0, 70), (0, 60, 100),\
-    (0, 80, 100), (0, 0, 230), (119, 11, 32), (0, 0, 0)
+    (0, 80, 100), (0, 0, 230), (119, 11, 32)
 ]
-assert len(CLASS_RGB_COLOR) == (DATASET_NUM_CLASSES + 1) and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR]),\
+assert len(CLASS_RGB_COLOR) == DATASET_NUM_CLASSES and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR]),\
     "'CLASS_RGB_COLOR' needs {:d} color values with three RGB color values!".format(DATASET_NUM_CLASSES)

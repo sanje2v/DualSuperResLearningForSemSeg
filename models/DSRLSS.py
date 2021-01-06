@@ -76,7 +76,7 @@ class DSRLSS(t.nn.Module):
 
     @staticmethod
     def _define_SISR_decoder(in_channels, out_channels, upscale_factor: int):
-        assert type(upscale_factor) == int, "BUG CHECK: 'upscale_factor' must be an integer type"
+        assert type(upscale_factor) == int, "BUG CHECK: 'upscale_factor' must be an integer type."
 
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=(out_channels * (upscale_factor ** 2)),
@@ -100,7 +100,7 @@ class DSRLSS(t.nn.Module):
 
     def __init__(self,
                  stage=None):
-        assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRLSS.__init__()".format(stage)
+        assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRLSS.__init__().".format(stage)
 
         super().__init__()
 
