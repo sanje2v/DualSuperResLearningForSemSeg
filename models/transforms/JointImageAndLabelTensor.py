@@ -9,9 +9,9 @@ class JointImageAndLabelTensor(t.nn.Module):
     def _PILToClassLabelLongTensor(seg, label_mapping_dict):
         assert isinstance(seg, Image.Image), "BUG CHECK: 'seg' parameter must be a PIL image."
 
-        mapping_func = np.vectorize(lambda x: np.int64(label_mapping_dict[x]))
+        mapping_func = np.vectorize(lambda x: label_mapping_dict[x])
 
-        return t.from_numpy(mapping_func(seg))
+        return t.from_numpy(mapping_func(seg).astype(dtype=np.int64))
 
 
     def __init__(self, label_mapping_dict):

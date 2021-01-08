@@ -3,8 +3,20 @@ import os.path
 import platform
 import ctypes
 import termcolor
+from datetime import datetime
 import torch as t
 from datasets.Cityscapes import settings as cityscapes_settings
+
+
+_starttime = datetime.now()
+def timeit(do_print=True):
+    global _starttime
+    difftime = datetime.now() - _starttime
+    _starttime = datetime.now()
+    if do_print:
+        print("{0:.3f} secs".format(difftime.total_seconds()))
+    return difftime
+timeit(False)
 
 
 def INFO(text):

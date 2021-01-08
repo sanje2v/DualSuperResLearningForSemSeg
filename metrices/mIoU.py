@@ -37,7 +37,7 @@ class mIoU:
         assert (area_inter <= area_union).all(), "BUG CHECK: Intersection area should always be less than or equal to union area."
 
         with np.errstate(divide='ignore', invalid='ignore'): # NOTE: We ignore division by zero
-            self.miou.append(area_inter.sum() / area_union.sum())
+            self.miou.append(np.nanmean(area_inter / area_union))
 
     def __call__(self):
         return np.nanmean(self.miou)    # CAUTION: We use 'nanmean' to ignore any Nan values

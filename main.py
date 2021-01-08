@@ -534,7 +534,16 @@ def main(command,
                                               mode='fine',
                                               target_type='semantic',
                                               transforms=test_joint_transforms)
-        test_loader = t.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        test_loader = t.utils.data.DataLoader(test_dataset,
+                                              batch_size=batch_size,
+                                              shuffle=False,
+                                              num_workers=num_workers,
+                                              pin_memory=isCUDAdevice(device),
+                                              drop_last=False)
+
+        # CAUTION: Make sure batch size is divisible by dataset size
+        if len(test_loader) % batch_size != 0:
+            raise Exception("--batch-size should be")
 
         with t.no_grad(), tqdm(total=len(test_loader),
                                desc='BENCHMARKING',
