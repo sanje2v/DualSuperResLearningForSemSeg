@@ -58,9 +58,10 @@ class ResNet101(t.nn.Module):
                 elif isinstance(m, tv.models.BasicBlock):
                     t.nn.init.constant_(m.bn2.weight, 0)
 
-    def initialize_with_pretrained_weights(self, weights_dir):
+    def initialize_with_pretrained_weights(self, weights_dir, map_location):
         pretrained_state_dict = t.utils.model_zoo.load_url(self.PRETRAINED_WEIGHTS_URL,
                                                            weights_dir,
+                                                           map_location=map_location,
                                                            progress=True,
                                                            file_name='resnet101_pretrained.pth')
         missing_keys, _ = self.load_state_dict(pretrained_state_dict, strict=False)

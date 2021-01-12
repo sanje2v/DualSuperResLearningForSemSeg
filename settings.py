@@ -8,6 +8,8 @@ t.set_default_dtype(DEFAULT_DTYPE)
 version_tuple = collections.namedtuple("Row", ["major", "minor"])
 MIN_PYTHON_VERSION = version_tuple(major=3, minor=7)
 MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
+MIN_TORCHVISION_VERSION = version_tuple(major=0, minor=8)
+MIN_NUMPY_VERSION = version_tuple(major=1, minor=19)
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 PARAMS_FILE = 'params.txt'

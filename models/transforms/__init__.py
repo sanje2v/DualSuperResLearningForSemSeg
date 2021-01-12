@@ -4,3 +4,4 @@ from .JointImageAndLabelTensor import JointImageAndLabelTensor
 from .JointRandomCrop import JointRandomCrop
 from .JointHFlip import JointHFlip
 from .JointRandomRotate import JointRandomRotate
+from .ColorJitter2 import ColorJitter2

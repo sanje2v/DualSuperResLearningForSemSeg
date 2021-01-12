@@ -17,7 +17,7 @@ from models import DSRLSS
 from models.schedulers import PolynomialLR
 from models.losses import FALoss
 from models.transforms import *
-from metrices import AverageMeter, mIoU, Accuracy
+from metrices import *
 from utils import *
 import consts
 import settings
@@ -30,7 +30,7 @@ g_profiler = None
 
 def do_train_val(do_train: bool,
                  model,
-                 device,
+                 target_device,
                  batch_size,
                  stage,
                  data_loader,
@@ -62,9 +62,9 @@ def do_train_val(do_train: bool,
             assert not (t.isnan(target).any().item()),\
                 FATAL("'target' contains 'NaN' values")
 
-            input_scaled = input_scaled.to(device)
-            input_org = (None if stage == 1 else input_org.to(device))
-            target = target.to(device)
+            input_scaled = input_scaled.to(target_device)
+            input_org = (None if stage == 1 else input_org.to(target_device))
+            target = target.to(target_device)
             if do_train:
                 optimizer.zero_grad()
 
@@ -205,28 +205,32 @@ def main(command,
 
         # Create model according to stage
         model = DSRLSS(stage)
+
         if command == 'resume_train':
             model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
+
+            # Copy the model with loaded weights into 'target_device' memory
+            model = model.to(target_device)
         else:
+            # Copy the model into 'target_device' memory
+            model = model.to(target_device)
+
             # Load initial weight, if any
             if init_weights:
-                model.load_state_dict(load_weights_or_checkpoint(init_weights)['model_state_dict'], strict=False)
+                model.load_state_dict(load_checkpoint_or_weights(init_weights, map_location=target_device)['model_state_dict'], strict=False)
             else:
                 # Load checkpoint from previous stage, if not the first stage
                 if stage == 1:
                     tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
-                    model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
+                    model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR, map_location=target_device)
                 else:
                     prev_weights_filename = os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
                     if os.path.isfile(prev_weights_filename):
                         tqdm.write(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
-                        weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
+                        weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=target_device)
                         model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                     else:
                         tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
-
-        # Copy the model into 'target_device' memory
-        model = model.to(target_device)
 
         # Prepare data from CityScapes dataset
         os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
@@ -236,7 +240,7 @@ def main(command,
         train_joint_transforms = JointCompose([JointRandomRotate(degrees=15.0, fill=(0, 0)),
                                                JointRandomCrop(min_scale=1.0, max_scale=3.5),
                                                JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                               lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3)(img), seg),
+                                               lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4)(img), seg),
                                                JointHFlip(),
                                                # CAUTION: 'kernel_size' should be > 0 and odd integer
                                                lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
@@ -313,7 +317,6 @@ def main(command,
                 starting_epoch = checkpoint_dict['epoch']
             else:
                 starting_epoch = 0
-                epochs += 1     # NOTE: We use index starting from 1 for epochs
 
             scheduler = PolynomialLR(optimizer,
                                      max_decay_steps=epochs,
@@ -326,7 +329,7 @@ def main(command,
             log_string = "\n################################# Stage {:d} training STARTED #################################".format(stage)
             tqdm.write(log_string)
 
-            for epoch in range((starting_epoch + 1), epochs):
+            for epoch in range((starting_epoch + 1), (epochs + 1)):
                 log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
                 tqdm.write(log_string)
 
@@ -337,7 +340,7 @@ def main(command,
                 FA_train_avg_loss, \
                 Avg_train_loss = do_train_val(do_train=True,
                                               model=model,
-                                              device=target_device,
+                                              target_device=target_device,
                                               batch_size=batch_size,
                                               stage=stage,
                                               data_loader=train_loader,
@@ -386,7 +389,7 @@ def main(command,
                     FA_val_avg_loss, \
                     Avg_val_loss = do_train_val(do_train=False,
                                                 model=model,
-                                                device=target_device,
+                                                target_device=target_device,
                                                 batch_size=batch_size,
                                                 stage=stage,
                                                 data_loader=val_loader,
@@ -435,7 +438,7 @@ def main(command,
         model = DSRLSS(stage=1).eval()
 
         # Load specified weights file
-        model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
+        model.load_state_dict(load_checkpoint_or_weights(weights, map_location=target_device)['model_state_dict'], strict=True)
 
         # Copy the model into 'target_device'
         model = model.to(target_device)
@@ -516,7 +519,7 @@ def main(command,
         model = DSRLSS(stage=1).eval()
 
         # Load specified weights file
-        model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
+        model.load_state_dict(load_checkpoint_or_weights(weights, map_location=target_device)['model_state_dict'], strict=True)
 
         # Copy the model into 'target_device'
         model = model.to(target_device)
@@ -602,6 +605,10 @@ if __name__ == '__main__':
         FATAL("This program needs at least Python {0:d}.{1:d} interpreter.".format(*settings.MIN_PYTHON_VERSION))
     assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
         FATAL("This program needs at least PyTorch {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION))
+    assert check_version(tv.__version__, *settings.MIN_TORCHVISION_VERSION), \
+        FATAL("This program needs at least TorchVision {0:d}.{1:d}.".format(*settings.MIN_TORCHVISION_VERSION))
+    assert check_version(np.__version__, *settings.MIN_NUMPY_VERSION), \
+        FATAL("This program needs at least NumPy {0:d}.{1:d}.".format(*settings.MIN_PYTORCH_VERSION))
 
     do_profiling = False
     try:

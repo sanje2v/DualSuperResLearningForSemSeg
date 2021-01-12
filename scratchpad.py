@@ -168,6 +168,7 @@ from utils import *
 import torch as t
 import torchvision as tv
 from models.transforms import *
+from torchvision.transforms import ColorJitter
 import numpy as np
 import settings
 from models import DSRLSS
@@ -183,24 +184,31 @@ def funcTimeIt(label, *params):
     print(label + ": ", end='')
     timeit()
     return params
+#train_joint_transforms = JointCompose([partial(funcTimeIt, 'start'),
+#                                       JointRandomRotate(15.0, (0, 0)),
+#                                       partial(funcTimeIt, 'JointRandomRotate'),
+#                                       JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+#                                       partial(funcTimeIt, 'JointImageAndLabelTensor'),
+#                                       JointRandomCrop(min_scale=1.0, max_scale=3.5),
+#                                       partial(funcTimeIt, 'JointRandomCrop'),
+#                                       lambda img, seg: (tv.transforms.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0.4)(img), seg),
+#                                       partial(funcTimeIt, 'ColorJitter'),
+#                                       JointHFlip(),
+#                                       partial(funcTimeIt, 'JointHFlip'),
+#                                       # CAUTION: 'kernel_size' should be > 0 and odd integer
+#                                       lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
+#                                       partial(funcTimeIt, 'GaussianBlur'),
+#                                       lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
+#                                       partial(funcTimeIt, 'RandomGrayscale'),
+#                                       #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+#                                       #partial(funcTimeIt, 'Normalize'),
+#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg),
+#                                       partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 train_joint_transforms = JointCompose([partial(funcTimeIt, 'start'),
-                                       JointRandomRotate(15.0, (0, 0)),
-                                       partial(funcTimeIt, 'JointRandomRotate'),
                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                        partial(funcTimeIt, 'JointImageAndLabelTensor'),
-                                       JointRandomCrop(min_scale=1.0, max_scale=3.5),
-                                       partial(funcTimeIt, 'JointRandomCrop'),
-                                       lambda img, seg: (tv.transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2)(img), seg),
+                                       lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0, saturation=0, hue=0.5)(img), seg),
                                        partial(funcTimeIt, 'ColorJitter'),
-                                       JointHFlip(),
-                                       partial(funcTimeIt, 'JointHFlip'),
-                                       # CAUTION: 'kernel_size' should be > 0 and odd integer
-                                       lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
-                                       partial(funcTimeIt, 'GaussianBlur'),
-                                       lambda img, seg: (tv.transforms.RandomGrayscale()(img), seg),
-                                       partial(funcTimeIt, 'RandomGrayscale'),
-                                       lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                       partial(funcTimeIt, 'Normalize'),
                                        lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg),
                                        partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
@@ -221,12 +229,12 @@ val_loader = t.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle
 
 data_loader = train_loader
 for ((input_scaled, input_org), target) in data_loader:
-    #input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
-    #input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
+    input_org = np.transpose(np.squeeze(input_org.cpu().numpy(), axis=0), (1, 2, 0))
+    input_org = Image.fromarray(np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)).convert('RGB')
 
     print('\n\n')
 
-    #input_org.show()
+    input_org.show()
 
     #target = np.squeeze(target.cpu().numpy(), axis=0)
     #target_img = np.zeros((*target.shape, 3), dtype=np.uint8)

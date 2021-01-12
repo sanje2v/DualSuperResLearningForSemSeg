@@ -2,8 +2,8 @@ from .consts import NUM_RGB_CHANNELS
 
 # Ref: https://github.com/inferno-pytorch/inferno/blob/master/inferno/io/box/cityscapes.py
 DATASET_NUM_CLASSES = 19
-DATASET_MEAN = [0.485, 0.456, 0.406]
-DATASET_STD = [0.229, 0.224, 0.225]
+DATASET_MEAN = [0.28689529, 0.32513294, 0.28389176]
+DATASET_STD = [0.17613647, 0.18099176, 0.17772235]
 # Maps labels to class indices
 IGNORE_CLASS_LABEL = 255
 LABEL_MAPPING_DICT =\

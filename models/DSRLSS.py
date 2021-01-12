@@ -134,8 +134,8 @@ class DSRLSS(t.nn.Module):
                                                                                    out_channels=1)
 
 
-    def initialize_with_pretrained_weights(self, weights_dir):
-        self.feature_extractor['backbone'].initialize_with_pretrained_weights(weights_dir)
+    def initialize_with_pretrained_weights(self, weights_dir, map_location=t.device('cpu')):
+        self.feature_extractor['backbone'].initialize_with_pretrained_weights(weights_dir, map_location)
 
 
     def forward(self, x):

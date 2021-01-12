@@ -4,7 +4,6 @@ import torchvision.transforms.functional as F
 import numbers
 from collections.abc import Sequence
 from PIL import Image
-import numpy as np
 
 
 class JointRandomRotate(t.nn.Module):
@@ -24,10 +23,8 @@ class JointRandomRotate(t.nn.Module):
         Returns:
             float: angle parameter to be passed to ``rotate`` for random rotation.
         """
-        # Get the default random number generator from numpy
-        random_gen = np.random.default_rng()
 
-        angle = random_gen.uniform(float(degrees[0]), float(degrees[1]))
+        angle = t.empty(1).uniform_(float(degrees[0]), float(degrees[1])).item()
         return angle
 
 

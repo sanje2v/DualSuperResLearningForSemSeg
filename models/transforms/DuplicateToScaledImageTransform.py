@@ -17,7 +17,10 @@ class DuplicateToScaledImageTransform(t.nn.Module):
         Returns:
             (Tensor, Tensor): (Scaled image tensor, Original image tensor).
         """
-        scaled_pic_tensor = t.squeeze(F.interpolate(t.unsqueeze(pic_tensor, dim=0), size=self.new_size, mode='bilinear', align_corners=True), dim=0)
+        scaled_pic_tensor = t.unsqueeze(pic_tensor, dim=0)
+        scaled_pic_tensor = F.interpolate(scaled_pic_tensor, size=self.new_size, mode='bilinear', align_corners=True)
+        scaled_pic_tensor = t.squeeze(scaled_pic_tensor, dim=0)
+
         return scaled_pic_tensor, pic_tensor
 
     def __repr__(self):
