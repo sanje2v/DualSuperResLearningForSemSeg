@@ -36,10 +36,17 @@ def do_train_val(do_train: bool,
                  data_loader,
                  w1,
                  w2,
+                 freeze_batch_norm=False,
                  optimizer=None,
                  scheduler=None):
     # Set model to either training or testing mode
     model.train(mode=do_train)
+
+    # If training and freeze BatchNorm layer option is ON, then freeze them
+    if do_train and freeze_batch_norm:
+        for module in model.modules():
+            if isinstance(module, t.nn.BatchNorm):
+                module.eval()
 
     # Losses to report
     CE_avg_loss = AverageMeter('CE Avg. Loss')
@@ -146,6 +153,7 @@ def main(command,
          w1=None,
          w2=None,
          description=None,
+         freeze_batch_norm=None,
          image_file=None,
          weights=None,
          src_weights=None,
@@ -158,7 +166,7 @@ def main(command,
     # Time keeper
     process_start_timestamp = datetime.now()
 
-    if command == 'resume_train':
+    if command == 'resume-train':
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
 
         device = checkpoint_dict['device']
@@ -178,6 +186,7 @@ def main(command,
         stage = checkpoint_dict['stage']
         w1 = checkpoint_dict['w1']
         w2 = checkpoint_dict['w2']
+        freeze_batch_norm = checkpoint_dict['freeze_batch_norm']
         description = checkpoint_dict['description']
         best_validation_dict = checkpoint_dict['best_validation_dict']
 
@@ -191,7 +200,7 @@ def main(command,
                t.backends.cudnn.benchmark = not disable_cudnn_benchmark
         target_device = t.device('cuda' if device == 'gpu' else device)
 
-    if command in ['train', 'resume_train']:
+    if command in ['train', 'resume-train']:
         # Training and Validation on dataset mode
 
         if command == 'train':
@@ -206,7 +215,7 @@ def main(command,
         # Create model according to stage
         model = DSRLSS(stage)
 
-        if command == 'resume_train':
+        if command == 'resume-train':
             model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
         else:
             # Load initial weight, if any
@@ -301,6 +310,7 @@ def main(command,
                           "Stage: {:d}".format(stage),
                           "Loss Weight 1: {:.4f}".format(w1) if stage > 1 else None,
                           "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
+                          "Freeze batch normalization: {:}".format(freeze_batch_norm),
                           "Description: {:s}".format(description) if description else None)
 
         # Start training and validation
@@ -312,7 +322,7 @@ def main(command,
                                     lr=learning_rate,
                                     momentum=momentum,
                                     weight_decay=weights_decay)
-            if command == 'resume_train':
+            if command == 'resume-train':
                 optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
                 starting_epoch = checkpoint_dict['epoch']
             else:
@@ -346,6 +356,7 @@ def main(command,
                                               data_loader=train_loader,
                                               w1=w1,
                                               w2=w2,
+                                              freeze_batch_norm=freeze_batch_norm,
                                               optimizer=optimizer,
                                               scheduler=scheduler)
 
@@ -370,8 +381,8 @@ def main(command,
                                     device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
                                     checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
                                     learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
-                                    description=description, epoch=epoch, best_validation_dict=best_validation_dict, ce_train_avg_loss=CE_train_avg_loss.avg,
-                                    model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
+                                    description=description, freeze_batch_norm=freeze_batch_norm, epoch=epoch, best_validation_dict=best_validation_dict,
+                                    ce_train_avg_loss=CE_train_avg_loss.avg, model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
                     tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                                  settings.CHECKPOINTS_DIR.format(stage=stage))))
 
@@ -476,14 +487,14 @@ def main(command,
         process_time_taken_secs = (process_end_timestamp - process_start_timestamp).total_seconds()
         tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
-    elif command == 'print_model':
+    elif command == 'print-model':
         model = DSRLSS(stage)
         tqdm.write(str(model))
         info = "\nTotal training parameters: {0:,}\nTotal parameters: {1:,}".format(countNoOfModelParams(model, only_training_params=True),
                                                                                     countNoOfModelParams(model, only_training_params=False))
         tqdm.write(INFO(info))
 
-    elif command == 'purne_weights':
+    elif command == 'purne-weights':
         with t.no_grad():
             # Purne weights not needed for inference
             model = DSRLSS(stage=1).eval()
@@ -494,7 +505,7 @@ def main(command,
             save_weights(*os.path.split(dest_weights), model)
             tqdm.write(INFO("Output weight saved in '{:s}'.".format(dest_weights)))
 
-    elif command == 'inspect_checkpoint':
+    elif command == 'inspect-checkpoint':
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
 
         def prettyDictToStr(dict_):
@@ -514,7 +525,7 @@ def main(command,
 
         tqdm.write(prettyDictToStr(checkpoint_dict))
 
-    elif command == 'edit_checkpoint':
+    elif command == 'edit-checkpoint':
         checkpoint_dict = load_checkpoint_or_weights(checkpoint)
         checkpoint_dict[key] = str2type(typeof)(value)
         save_checkpoint(*os.path.split(checkpoint), **checkpoint_dict)
@@ -550,10 +561,6 @@ def main(command,
                                               num_workers=num_workers,
                                               pin_memory=isCUDAdevice(device),
                                               drop_last=False)
-
-        # CAUTION: Make sure batch size is divisible by dataset size
-        if len(test_loader) % batch_size != 0:
-            raise Exception("--batch-size should be")
 
         with t.no_grad(), tqdm(total=len(test_loader),
                                desc='BENCHMARKING',
@@ -625,52 +632,53 @@ if __name__ == '__main__':
         # Training arguments
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
         train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
-        train_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
+        train_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         train_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
-        train_parser.add_argument('--num_workers', default=4, type=int, help="No. of workers for data loader")
-        train_parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
-        train_parser.add_argument('--checkpoint_interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
-        train_parser.add_argument('--checkpoint_history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
-        train_parser.add_argument('--init_weights', default=None, type=str, help="Load initial weights file for model")
-        train_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for training and testing")
+        train_parser.add_argument('--num-workers', default=4, type=int, help="No. of workers for data loader")
+        train_parser.add_argument('--val-interval', default=10, type=int, help="Epoch intervals after which to perform validation")
+        train_parser.add_argument('--checkpoint-interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
+        train_parser.add_argument('--checkpoint-history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
+        train_parser.add_argument('--init-weights', default=None, type=str, help="Load initial weights file for model")
+        train_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for training and testing")
         train_parser.add_argument('--epochs', required=True, type=int, help="No. of epochs to train")
-        train_parser.add_argument('--learning_rate', type=float, default=0.01, help="Learning rate to begin training with")
-        train_parser.add_argument('--end_learning_rate', type=float, default=0.001, help="End learning rate for the last epoch")
+        train_parser.add_argument('--learning-rate', type=float, default=0.01, help="Learning rate to begin training with")
+        train_parser.add_argument('--end-learning-rate', type=float, default=0.001, help="End learning rate for the last epoch")
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
-        train_parser.add_argument('--weights_decay', type=float, default=0.0005, help="Weights decay for SGD")
-        train_parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
+        train_parser.add_argument('--weights-decay', type=float, default=0.0005, help="Weights decay for SGD")
+        train_parser.add_argument('--poly-power', type=float, default=0.9, help="Power for poly learning rate strategy")
         train_parser.add_argument('--stage', type=int, choices=settings.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
+        train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
 
         # Resume training from checkpoint arguments
-        resume_train_parser = command_parser.add_parser('resume_train', help="Resume training model from checkpoint file")
+        resume_train_parser = command_parser.add_parser('resume-train', help="Resume training model from checkpoint file")
         resume_train_parser.add_argument('--checkpoint', required=True, type=str, help="Resume training with given checkpoint file")
 
         # Evaluation arguments
         test_parser = command_parser.add_parser('test', help="Test trained weights with a single input image")
-        test_parser.add_argument('--image_file', type=str, required=True, help="Run evaluation on a image file using trained weights")
+        test_parser.add_argument('--image-file', type=str, required=True, help="Run evaluation on a image file using trained weights")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
-        test_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
+        test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
 
         # Print model arguments
-        print_model_parser = command_parser.add_parser('print_model', help="Prints all the layers in the model for a stage")
+        print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model for a stage")
         print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
 
         # Purne weights arguments
-        purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
-        purne_weights_parser.add_argument('--src_weights', type=str, required=True, help="Checkpoint/Weights file to prune")
-        purne_weights_parser.add_argument('--dest_weights', type=str, required=True, help="New weights file to write to")
+        purne_weights_parser = command_parser.add_parser('purne-weights', help="Removes all weights from a weights file which are not needed for inference")
+        purne_weights_parser.add_argument('--src-weights', type=str, required=True, help="Checkpoint/Weights file to prune")
+        purne_weights_parser.add_argument('--dest-weights', type=str, required=True, help="New weights file to write to")
 
         # Inspect checkpoint arguments
-        inspect_checkpoint_parser = command_parser.add_parser('inspect_checkpoint', help="View contents of a checkpoint file")
+        inspect_checkpoint_parser = command_parser.add_parser('inspect-checkpoint', help="View contents of a checkpoint file")
         inspect_checkpoint_parser.add_argument('--checkpoint', required=True, type=str, help="Checkpoint file to view contents of")
 
         # Edit checkpoint arguments
-        edit_checkpoint_parser = command_parser.add_parser('edit_checkpoint', help="Edit contents of a checkpoint file")
+        edit_checkpoint_parser = command_parser.add_parser('edit-checkpoint', help="Edit contents of a checkpoint file")
         edit_checkpoint_parser.add_argument('--checkpoint', required=True, type=str, help="Checkpoint file to edit contents of")
         edit_checkpoint_parser.add_argument('--key', required=True, type=str, help="Specify key of the dictionary of checkpoint to edit")
         edit_checkpoint_parser.add_argument('--value', required=True, type=str, help="Specify value of the key to edit")
@@ -679,11 +687,11 @@ if __name__ == '__main__':
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
-        benchmark_parser.add_argument('--dataset_split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
+        benchmark_parser.add_argument('--dataset-split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
         benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
-        benchmark_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
-        benchmark_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
-        benchmark_parser.add_argument('--batch_size', default=6, type=int, help="Batch size to use for benchmarking")
+        benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
+        benchmark_parser.add_argument('--num-workers', default=4, type=int, help="Number of workers for data loader")
+        benchmark_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for benchmarking")
 
         args = parser.parse_args()
 
@@ -694,44 +702,44 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
-                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
+                raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
 
             if not args.num_workers >= 0:
-                raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
+                raise argparse.ArgumentTypeError("'--num-workers' should be greater than or equal to 0!")
 
             if not args.val_interval > 0:
-                raise argparse.ArgumentTypeError("'--val_interval' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--val-interval' should be greater than 0!")
 
             if not args.checkpoint_interval > 0:
-                raise argparse.ArgumentTypeError("'--checkpoint_interval' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--checkpoint-interval' should be greater than 0!")
 
             if not args.checkpoint_history >= 0:
-                raise argparse.ArgumentTypeError("'--checkpoint_history' should be greater than or equal (to disable) 0!")
+                raise argparse.ArgumentTypeError("'--checkpoint-history' should be greater than or equal (to disable) 0!")
 
             if args.init_weights:
                 if not any(hasExtension(args.init_weights, x) for x in ['.checkpoint', '.weights']):
-                    raise argparse.ArgumentTypeError("'--init_weights' must be of either '.checkpoint' or '.weights' file type!")
+                    raise argparse.ArgumentTypeError("'--init-weights' must be of either '.checkpoint' or '.weights' file type!")
 
                 if not os.path.isfile(args.init_weights):
                    raise argparse.ArgumentTypeError("Couldn't find initial weights file '{0:s}'!".format(args.init_weights))
 
             if not args.batch_size > 0:
-                raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--batch-size' should be greater than 0!")
 
             if not args.epochs > 0:
                 raise argparse.ArgumentTypeError("'--epochs' should be specified and it must be greater than 0!")
 
             if not args.learning_rate > 0.:
-                raise argparse.ArgumentTypeError("'--learning_rate' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--learning-rate' should be greater than 0!")
 
             if not args.momentum > 0.:
                 raise argparse.ArgumentTypeError("'--momentum' should be greater than 0!")
 
             if not args.weights_decay > 0.:
-                raise argparse.ArgumentTypeError("'--weights_decay' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--weights-decay' should be greater than 0!")
 
             if not args.poly_power > 0.:
-                raise argparse.ArgumentTypeError("'--poly_power' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--poly-power' should be greater than 0!")
 
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
@@ -745,7 +753,7 @@ if __name__ == '__main__':
             # Enable profiler if '--profile' option is specified
             do_profiling = args.profile
 
-        elif args.command == 'resume_train':
+        elif args.command == 'resume-train':
             if not hasExtension(args.checkpoint, '.checkpoint'):
                 raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file as the whole model and optimizer states needs to be loaded!")
 
@@ -754,7 +762,7 @@ if __name__ == '__main__':
 
         elif args.command == 'test':
             if not os.path.isfile(args.image_file):
-                raise argparse.ArgumentTypeError("File specified in '--image_file' parameter doesn't exists!")
+                raise argparse.ArgumentTypeError("File specified in '--image-file' parameter doesn't exists!")
 
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
@@ -766,31 +774,31 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
-                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
+                raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
 
             # Enable profiler if '--profile' option is specified
             do_profiling = args.profile
 
-        elif args.command == 'purne_weights':
+        elif args.command == 'purne-weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
-                raise argparse.ArgumentTypeError("'--src_weights' must be of either '.checkpoint' or '.weights' file type!")
+                raise argparse.ArgumentTypeError("'--src-weights' must be of either '.checkpoint' or '.weights' file type!")
 
             if not os.path.isfile(args.src_weights):
-                raise argparse.ArgumentTypeError("File specified in '--src_weights' parameter doesn't exists!")
+                raise argparse.ArgumentTypeError("File specified in '--src-weights' parameter doesn't exists!")
 
             if os.path.isfile(args.dest_weights):
                 answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).lower()
                 if answer != 'y':
                     sys.exit(0)
 
-        elif args.command == 'inspect_checkpoint':
+        elif args.command == 'inspect-checkpoint':
             if not hasExtension(args.checkpoint, '.checkpoint'):
                 raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file!")
 
             if not os.path.isfile(args.checkpoint):
                 raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
 
-        elif args.command == 'edit_checkpoint':
+        elif args.command == 'edit-checkpoint':
             if not hasExtension(args.checkpoint, '.checkpoint'):
                 raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file!")
 
@@ -808,16 +816,16 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
-                raise argparse.ArgumentTypeError("'--disable_cudnn_benchmark' is unsupported in non-CUDA devices!")
+                raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
 
             if not args.num_workers >= 0:
-                raise argparse.ArgumentTypeError("'--num_workers' should be greater than or equal to 0!")
+                raise argparse.ArgumentTypeError("'--num-workers' should be greater than or equal to 0!")
 
             if not args.batch_size > 0:
-                raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
+                raise argparse.ArgumentTypeError("'--batch-size' should be greater than 0!")
 
         # Do action in 'command'
-        assert args.command in ['train', 'resume_train', 'test', 'print_model', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
+        assert args.command in ['train', 'resume-train', 'test', 'print-model', 'purne-weights', 'inspect-checkpoint', 'edit-checkpoint', 'benchmark'],\
             "BUG CHECK: Unimplemented 'args.command': {:s}.".format(args.command)
 
         with t.autograd.profiler.profile(enabled=do_profiling,
