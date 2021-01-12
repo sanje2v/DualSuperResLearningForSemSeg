@@ -202,6 +202,7 @@ def main(command,
 
     if command in ['train', 'resume-train']:
         # Training and Validation on dataset mode
+        training_epoch_timetaken_list = []
 
         if command == 'train':
             best_validation_dict = {}
@@ -360,10 +361,6 @@ def main(command,
                                               optimizer=optimizer,
                                               scheduler=scheduler)
 
-                # Print estimated time for training completion
-                training_epoch_timetaken = (datetime.now() - training_epoch_begin_timestamp).total_seconds() / timedelta(hours=1).total_seconds()
-                tqdm.write("Training to complete in: {:.2f} hr(s)".format(training_epoch_timetaken * (epochs - epoch)))
-
                 # Log training losses for this epoch to TensorBoard
                 train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss.avg, epoch)
                 if stage > 1:
@@ -429,6 +426,11 @@ def main(command,
 
                 # Calculate new learning rate for next epoch
                 scheduler.step()
+
+                # Print estimated time for training completion
+                training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds() / timedelta(hours=1).total_seconds())
+                training_epoch_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
+                tqdm.write("Est. training completion in: {:.2f} hr(s)".format(training_epoch_timetaken * (epochs - epoch)))
 
             # Save training weights for this stage
             save_weights(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE, model)
