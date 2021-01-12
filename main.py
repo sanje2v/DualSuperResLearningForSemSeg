@@ -45,7 +45,7 @@ def do_train_val(do_train: bool,
     # If training and freeze BatchNorm layer option is ON, then freeze them
     if do_train and freeze_batch_norm:
         for module in model.modules():
-            if isinstance(module, t.nn.BatchNorm):
+            if isinstance(module, t.nn.BatchNorm2d):
                 module.eval()
 
     # Losses to report
