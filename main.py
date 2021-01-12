@@ -208,13 +208,7 @@ def main(command,
 
         if command == 'resume_train':
             model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
-
-            # Copy the model with loaded weights into 'target_device' memory
-            model = model.to(target_device)
         else:
-            # Copy the model into 'target_device' memory
-            model = model.to(target_device)
-
             # Load initial weight, if any
             if init_weights:
                 model.load_state_dict(load_checkpoint_or_weights(init_weights, map_location=target_device)['model_state_dict'], strict=False)
@@ -231,6 +225,12 @@ def main(command,
                         model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                     else:
                         tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
+
+        # Copy the model into 'target_device' memory
+        model = model.to(target_device)
+
+        # Print number of training parameters
+        tqdm.write(INFO("Total training parameters: {:,}".format(countNoOfModelParams(model, only_training_params=True))))
 
         # Prepare data from CityScapes dataset
         os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
@@ -476,6 +476,13 @@ def main(command,
         process_time_taken_secs = (process_end_timestamp - process_start_timestamp).total_seconds()
         tqdm.write(INFO("Output image saved as: {0:s}. Evaluation required {1:.2f} secs.".format(output_image_filename, process_time_taken_secs)))
 
+    elif command == 'print_model':
+        model = DSRLSS(stage)
+        tqdm.write(str(model))
+        info = "\nTotal training parameters: {0:,}\nTotal parameters: {1:,}".format(countNoOfModelParams(model, only_training_params=True),
+                                                                                    countNoOfModelParams(model, only_training_params=False))
+        tqdm.write(INFO(info))
+
     elif command == 'purne_weights':
         with t.no_grad():
             # Purne weights not needed for inference
@@ -632,7 +639,7 @@ if __name__ == '__main__':
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
         train_parser.add_argument('--weights_decay', type=float, default=0.0005, help="Weights decay for SGD")
         train_parser.add_argument('--poly_power', type=float, default=0.9, help="Power for poly learning rate strategy")
-        train_parser.add_argument('--stage', type=int, choices=[1, 2, 3], required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
+        train_parser.add_argument('--stage', type=int, choices=settings.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
@@ -648,6 +655,10 @@ if __name__ == '__main__':
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable_cudnn_benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
+
+        # Print model arguments
+        print_model_parser = command_parser.add_parser('print_model', help="Prints all the layers in the model for a stage")
+        print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne_weights', help="Removes all weights from a weights file which are not needed for inference")
@@ -806,10 +817,13 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--batch_size' should be greater than 0!")
 
         # Do action in 'command'
-        assert args.command in ['train', 'resume_train', 'test', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
+        assert args.command in ['train', 'resume_train', 'test', 'print_model', 'purne_weights', 'inspect_checkpoint', 'edit_checkpoint', 'benchmark'],\
             "BUG CHECK: Unimplemented 'args.command': {:s}.".format(args.command)
 
-        with t.autograd.profiler.profile(enabled=do_profiling, use_cuda=isCUDAdevice(args.device), record_shapes=True, profile_memory=True) as profiler:
+        with t.autograd.profiler.profile(enabled=do_profiling,
+                                         use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
+                                         record_shapes=True,
+                                         profile_memory=True) as profiler:
             g_profiler = profiler
             main(**args.__dict__)
 

@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 200 --description "Stage 1 training with 200 epochs" --batch_size 2 --num_workers 0 --device gpu --val_interval 5 --checkpoint_interval 5</CommandLineArguments>
+    <CommandLineArguments>train --stage 1 --epochs 200 --description "Stage 1 training with 200 epochs" --batch_size 2 --num_workers 0 --device gpu --val_interval 5 --checkpoint_interval 5 --disable_cudnn_benchmark</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>

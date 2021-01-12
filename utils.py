@@ -5,6 +5,7 @@ import ctypes
 import termcolor
 from datetime import datetime
 import torch as t
+import numpy as np
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
@@ -22,13 +23,13 @@ def timeit(message=None, label='default'):
 
 
 def INFO(text):
-    return termcolor.colored("INFO: " + text, 'green')
+    return termcolor.colored("INFO: {:}".format(text), 'green')
 
 def CAUTION(text):
-    return termcolor.colored("CAUTION: " + text, 'yellow')
+    return termcolor.colored("CAUTION: {:}".format(text), 'yellow')
 
 def FATAL(text):
-    return termcolor.colored("FATAL: " + text, 'red', attrs=['reverse', 'blink'])
+    return termcolor.colored("FATAL: {:}".format(text), 'red', attrs=['reverse', 'blink'])
 
 
 def check_version(version, major, minor):
@@ -61,6 +62,9 @@ def hasExtension(filename, extension):
 
 def isCUDAdevice(device):
     return device.startswith(('gpu', 'cuda'))
+
+def countNoOfModelParams(model, only_training_params=False):
+    return sum(p.numel() for p in model.parameters() if (p.requires_grad or not only_training_params))
 
 def write_params_file(filename, *list_params):
     with open(filename, mode='w') as params_file:
