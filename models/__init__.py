@@ -1,2 +1,2 @@
-from .DSRLSS import DSRLSS
+from .DSRL import DSRL
 from .ResNet101 import ResNet101

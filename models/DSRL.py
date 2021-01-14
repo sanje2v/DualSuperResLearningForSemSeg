@@ -7,7 +7,7 @@ from .modules.ASPP import ASPP
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
-class DSRLSS(t.nn.Module):
+class DSRL(t.nn.Module):
     MODEL_INPUT_SIZE = (512, 1024)
     MODEL_OUTPUT_SIZE = (1024, 2048)
 
@@ -100,7 +100,7 @@ class DSRLSS(t.nn.Module):
 
     def __init__(self,
                  stage=None):
-        assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRLSS.__init__().".format(stage)
+        assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRL.__init__().".format(stage)
 
         super().__init__()
 
@@ -108,29 +108,29 @@ class DSRLSS(t.nn.Module):
         self.stage = stage
 
         # Feature extractor
-        self.feature_extractor = DSRLSS._define_feature_extractor(in_channels=2048,
+        self.feature_extractor = DSRL._define_feature_extractor(in_channels=2048,
                                                                   out_channels1=256,
                                                                   out_channels2=48)
 
         # Semantic Segmentation Super Resolution (SSSR)
-        self.SSSR_decoder = DSRLSS._define_SSSR_decoder(in_channels1=256,
+        self.SSSR_decoder = DSRL._define_SSSR_decoder(in_channels1=256,
                                                         in_channels2=48,
                                                         mid_channels=256,
                                                         out_channels=cityscapes_settings.DATASET_NUM_CLASSES)
 
         if self.stage > 1:
             # Single Image Super-Resolution (SISR)
-            self.SISR_decoder = DSRLSS._define_SISR_decoder(in_channels=(256+48),
+            self.SISR_decoder = DSRL._define_SISR_decoder(in_channels=(256+48),
                                                             out_channels=consts.NUM_RGB_CHANNELS,
                                                             upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
 
             if self.stage > 2:
                 # Feature transform module for SSSR
-                self.SSSR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
+                self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
                                                                                    out_channels=1)
 
                 # Feature transform module for SISR
-                self.SISR_feature_transformer = DSRLSS._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
+                self.SISR_feature_transformer = DSRL._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
                                                                                    out_channels=1)
 
 

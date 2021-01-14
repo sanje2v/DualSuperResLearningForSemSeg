@@ -171,7 +171,7 @@ from models.transforms import *
 from torchvision.transforms import ColorJitter
 import numpy as np
 import settings
-from models import DSRLSS
+from models import DSRL
 import datasets.Cityscapes.settings as cityscapes_settings
 from PIL import Image
 from functools import partial
@@ -202,18 +202,18 @@ def funcTimeIt(label, *params):
 #                                       partial(funcTimeIt, 'RandomGrayscale'),
 #                                       #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
 #                                       #partial(funcTimeIt, 'Normalize'),
-#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg),
+#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg),
 #                                       partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 train_joint_transforms = JointCompose([partial(funcTimeIt, 'start'),
                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                        partial(funcTimeIt, 'JointImageAndLabelTensor'),
                                        lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0, saturation=0, hue=0.5)(img), seg),
                                        partial(funcTimeIt, 'ColorJitter'),
-                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg),
+                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg),
                                        partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                     #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
-                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRLSS.MODEL_INPUT_SIZE)(img), seg)])
+                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
 train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                         split='train',
                                         mode='fine',

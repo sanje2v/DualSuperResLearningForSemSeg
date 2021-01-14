@@ -3,7 +3,8 @@ import os.path
 import platform
 import ctypes
 import termcolor
-from datetime import datetime
+from tqdm.auto import tqdm as tqdm
+from datetime import datetime, timedelta
 import torch as t
 import numpy as np
 from datasets.Cityscapes import settings as cityscapes_settings
@@ -20,6 +21,34 @@ def timeit(message=None, label='default'):
         print("{0:s}: {1:.3f} secs".format(label, difftime.total_seconds()))
     _starttimes_dict[label] = now
     return difftime
+
+def makeSecondsPretty(time_elasped):
+    if time_elasped >= 86400.:
+        time_elasped /= 86400.
+        time_elasped_unit = 'days'
+    elif time_elasped >= 3600.:
+        time_elasped /= 3600.
+        time_elasped_unit = 'hrs'
+    elif time_elasped >= 60.:
+        time_elasped /= 60.
+        time_elasped_unit = 'mins'
+    else:
+        time_elasped_unit = 'secs'
+
+    return "{0:.2f} {1:s}".format(time_elasped, time_elasped_unit)
+
+class timethis:
+    def __init__(self, message):
+        self.message = message
+        self.start_time = None
+
+    def __enter__(self):
+        self.start_time = datetime.now()
+        return self
+
+    def __exit__(self):
+        time_elasped = (datetime.now() - self. start_time).total_seconds()
+        tqdm.write(message.format(makeSecondsPretty(time_elasped)))
 
 
 def INFO(text):
@@ -63,15 +92,13 @@ def hasExtension(filename, extension):
 def isCUDAdevice(device):
     return device.startswith(('gpu', 'cuda'))
 
-def countNoOfModelParams(model, only_training_params=False):
-    return sum(p.numel() for p in model.parameters() if (p.requires_grad or not only_training_params))
-
-def write_params_file(filename, *list_params):
-    with open(filename, mode='w') as params_file:
-        for params_str in list_params:
-            if params_str:
-                params_file.write(params_str)
-                params_file.write('\n')     # NOTE: '\n' here automatically converts it to newline for the current platform
+def countNoOfModelParams(model):
+    num_learning_parameters = num_total_parameters = 0
+    for param in model.parameters():
+        num_total_parameters += param.numel()
+        if param.requires_grad:
+            num_learning_parameters += param.numel()
+    return num_learning_parameters, num_total_parameters
 
 def load_checkpoint_or_weights(filename, map_location=t.device('cpu')):
     return t.load(filename, map_location)
