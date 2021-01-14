@@ -305,7 +305,7 @@ def _do_train_val(do_train,
                                                  leave=False,
                                                  bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         if not do_train:
-            RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader))
+            RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader)//batch_size)
 
         for ((input_scaled, input_org), target) in data_loader:
             # SANITY CHECK: Check data doesn't have any 'NaN' values
@@ -371,7 +371,7 @@ def _do_train_val(do_train,
 
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
-                SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
+                SSSR_output = SSSR_output.detach().cpu().numpy()[0]    # Bring back result to CPU memory and select first in batch
                 input_org = input_org.mul_(cityscapes_settings.DATASET_STD).add_(cityscapes_settings.DATASET_MEAN).detach().cpu().numpy()
                 logger.add_image("EXAMPLE",
                                  make_output_visualization(SSSR_output, input_org, DSRL.MODEL_OUTPUT_SIZE, cityscapes_settings.CLASS_RGB_COLOR))
