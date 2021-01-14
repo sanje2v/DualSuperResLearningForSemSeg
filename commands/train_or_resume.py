@@ -307,7 +307,7 @@ def _do_train_val(do_train,
         if not do_train:
             RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader)//batch_size)
 
-        for ((input_scaled, input_org), target) in data_loader:
+        for i, ((input_scaled, input_org), target) in enumerate(data_loader):
             # SANITY CHECK: Check data doesn't have any 'NaN' values
             assert not (t.isnan(input_scaled).any().item()),\
                 FATAL("'input_scaled' contains 'NaN' values")
