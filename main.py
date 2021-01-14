@@ -264,7 +264,7 @@ if __name__ == '__main__':
             if not args.batch_size > 0:
                 raise argparse.ArgumentTypeError("'--batch-size' should be greater than 0!")
 
-        with t.autograd.profiler.profile(enabled=do_profiling,
+        with t.autograd.profiler.profile(enabled=getattr(args, 'profile', False),
                                          use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
                                          record_shapes=True,
                                          profile_memory=True) as profiler:
