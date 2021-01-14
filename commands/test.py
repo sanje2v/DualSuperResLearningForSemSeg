@@ -37,14 +37,7 @@ def test(image_file, weights, device, device_obj, **other_args):
             SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(device_obj))
             SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
 
-        # Prepare output image consisting of model input and segmentation image side-by-side (hence '* 2')
-        output_image = np.zeros((DSRL.MODEL_OUTPUT_SIZE[0], DSRL.MODEL_OUTPUT_SIZE[1] * 2, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
-        argmax_map = np.argmax(SSSR_output, axis=0)
-
-        for y in range(DSRL.MODEL_OUTPUT_SIZE[0]):
-            for x in range(DSRL.MODEL_OUTPUT_SIZE[1]):
-                output_image[y, x, :] = input_image.getpixel((x, y))
-                output_image[y, x + DSRL.MODEL_OUTPUT_SIZE[1], :] = cityscapes_settings.CLASS_RGB_COLOR[(argmax_map[y, x])]
+        output_image = make_output_visualization(SSSR_output, input_image, DSRL.MODEL_OUTPUT_SIZE, cityscapes_settings.CLASS_RGB_COLOR)
 
     with Image.fromarray(output_image, mode='RGB') as output_image:    # Convert from numpy array to PIL Image
         # Save and show output on plot

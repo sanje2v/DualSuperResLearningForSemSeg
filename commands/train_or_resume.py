@@ -5,7 +5,7 @@ import numpy as np
 import torch as t
 import torchvision as tv
 from torch.utils import tensorboard as tb
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from models import DSRL
 from models.schedulers import PolynomialLR
@@ -159,7 +159,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                  last_epoch=(starting_epoch - 1))
 
         # Start training and then validation after specific intervals
-        train_logger.add_text("INFO", "Training started on {:s}".format(process_start_timestamp.strftime("%c")), 1)
+        train_logger.add_text("INFO", "Training started on {:s}.".format(process_start_timestamp.strftime("%c")), 1)
         log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
         tqdm.write('\n' + INFO(log_string))
 
@@ -181,6 +181,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                            data_loader=train_loader,
                                            w1=w1,
                                            w2=w2,
+                                           logger=train_logger,
                                            freeze_batch_norm=freeze_batch_norm,
                                            optimizer=optimizer,
                                            scheduler=scheduler)
@@ -226,7 +227,8 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                              stage=stage,
                                              data_loader=val_loader,
                                              w1=w1,
-                                             w2=w2)
+                                             w2=w2,
+                                             logger=val_logger)
 
                 # Save epoch number and total error of best validation and then checkpoint
                 if not best_validation_dict or Avg_val_loss.avg < best_validation_dict['loss']:
@@ -260,9 +262,9 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
         save_weights(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE, model)
 
         process_end_timestamp = datetime.now()
-        process_time_taken_hrs = (process_end_timestamp - process_start_timestamp).total_seconds() / timedelta(hours=1).total_seconds()
+        process_time_taken = (process_end_timestamp - process_start_timestamp).total_seconds()
         train_logger.add_text("INFO",
-                              "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken_hrs),
+                              "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken),
                                                                                    process_end_timestamp.strftime("%c")),
                               epochs)
         log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
@@ -277,6 +279,7 @@ def _do_train_val(do_train,
                   data_loader,
                   w1,
                   w2,
+                  logger,
                   freeze_batch_norm=False,
                   optimizer=None,
                   scheduler=None):
@@ -286,7 +289,7 @@ def _do_train_val(do_train,
     # If training and freeze BatchNorm layer option is ON, then freeze them
     if do_train and freeze_batch_norm:
         for module in model.modules():
-            if isinstance(module, t.nn.BatchNorm2d):
+            if isinstance(module, (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d)):
                 module.eval()
 
     # Losses to report
@@ -301,6 +304,9 @@ def _do_train_val(do_train,
                                                  position=0 if do_train else 1,
                                                  leave=False,
                                                  bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
+        if not do_train:
+            RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader))
+
         for ((input_scaled, input_org), target) in data_loader:
             # SANITY CHECK: Check data doesn't have any 'NaN' values
             assert not (t.isnan(input_scaled).any().item()),\
@@ -311,7 +317,8 @@ def _do_train_val(do_train,
                 FATAL("'target' contains 'NaN' values")
 
             input_scaled = input_scaled.to(device_obj)
-            input_org = (None if stage == 1 else input_org.to(device_obj))
+            if stage > 1:
+                input_org = input_org.to(device_obj)
             target = target.to(device_obj)
             if do_train:
                 optimizer.zero_grad()
@@ -319,24 +326,28 @@ def _do_train_val(do_train,
             SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model.forward(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
             assert not (t.isnan(SSSR_output).any().item()),\
-                FATAL("SSSR network output contains 'NaN' values and so cannot continue. Exiting.")
+                FATAL("SSSR network output contains 'NaN' values and so cannot continue")
             assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()),\
-                FATAL("SISSR network output contains 'NaN' values and so cannot continue. Exiting.")
+                FATAL("SISSR network output contains 'NaN' values and so cannot continue.")
+            assert not (False if SSSR_transform_output is None else t.isnan(SSSR_transform_output).any().item()),\
+                FATAL("SISSR feature transform network output contains 'NaN' values and so cannot continue.")
+            assert not (False if SISR_transform_output is None else t.isnan(SISR_transform_output).any().item()),\
+                FATAL("SISSR feature transform network output contains 'NaN' values and so cannot continue.")
 
             CE_loss = t.nn.CrossEntropyLoss(ignore_index=cityscapes_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
             FA_loss = (w2 * FALoss()(SSSR_transform_output, SISR_transform_output)) if stage > 2 else t.tensor(0., requires_grad=False)
-            loss = CE_loss + MSE_loss + FA_loss
+            total_loss = CE_loss + MSE_loss + FA_loss
 
             if do_train:
-                loss.backward()     # Backpropagate
-                optimizer.step()    # Increment global step
+                total_loss.backward()     # Backpropagate
+                optimizer.step()          # Increment global step
 
             # Convert loss tensors to float on CPU memory
             CE_loss = CE_loss.item()
             MSE_loss = MSE_loss.item() if stage > 1 else None
             FA_loss = FA_loss.item() if stage > 2 else None
-            loss = loss.item()
+            total_loss = total_loss.item()
 
             # Compute averages for losses
             CE_avg_loss.update(CE_loss, batch_size)
@@ -344,7 +355,7 @@ def _do_train_val(do_train,
                 MSE_avg_loss.update(MSE_loss, batch_size)
                 if stage > 2:
                     FA_avg_loss.update(FA_loss, batch_size)
-            Avg_loss.update(loss, batch_size)
+            Avg_loss.update(total_loss, batch_size)
 
             # Add loss information to progress bar
             log_string = []
@@ -353,10 +364,17 @@ def _do_train_val(do_train,
                 log_string.append("MSE: {:.4f}".format(MSE_loss))
                 if stage > 2:
                     log_string.append("FA: {:.4f}".format(FA_loss))
-                log_string.append("Total: {:.3f}".format(loss))
+                log_string.append("Total: {:.3f}".format(total_loss))
             log_string = ', '.join(log_string)
             progressbar.set_postfix_str("Losses [{0}]".format(log_string))
             progressbar.update()
+
+            # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
+            if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
+                SSSR_output = np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0)    # Bring back result to CPU memory and remove batch dimension
+                input_org = input_org.mul_(cityscapes_settings.DATASET_STD).add_(cityscapes_settings.DATASET_MEAN).detach().cpu().numpy()
+                logger.add_image("EXAMPLE",
+                                 make_output_visualization(SSSR_output, input_org, DSRL.MODEL_OUTPUT_SIZE, cityscapes_settings.CLASS_RGB_COLOR))
 
         # Show learning rate and average losses before ending epoch
         log_string = []

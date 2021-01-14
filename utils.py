@@ -7,7 +7,8 @@ from tqdm.auto import tqdm as tqdm
 from datetime import datetime, timedelta
 import torch as t
 import numpy as np
-from datasets.Cityscapes import settings as cityscapes_settings
+
+import consts
 
 
 _starttimes_dict = {'default': datetime.now()}
@@ -110,3 +111,18 @@ def save_checkpoint(dir, filename, **checkpoint_vars):
 def save_weights(dir, filename, model):
     os.makedirs(dir, exist_ok=True)
     t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
+
+def make_output_visualization(SSSR_output, input_image, model_output_size, class_rgb_color, blend_factor=0.3):
+    assert SSSR_output.shape == input_image.shape
+
+    output_image = np.zeros((model_output_size[0], model_output_size[1] * 3, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
+    argmax_map = np.argmax(SSSR_output, axis=0)
+    
+    for y in range(model_output_size[0]):
+        for x in range(model_output_size[1]):
+            output_image[y, x, :] = input_image.getpixel((x, y))
+            output_image[y, x + model_output_size[1], :] = class_rgb_color[(argmax_map[y, x])]
+
+            blended_pixels = (1. - blend_factor) * output_image[y, x, :] + blend_factor * output_image[y, x + model_output_size[1], :]
+            output_image[y, 2*x + model_output_size[1], :] = np.clip(blended_pixels, a_min=0, a_max=255).astype(np.uint8)
+    return output_image
