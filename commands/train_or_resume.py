@@ -43,7 +43,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
     else:
         # Load initial weight, if any
         if init_weights:
-            model.load_state_dict(load_checkpoint_or_weights(init_weights)['model_state_dict'], strict=False)
+            model.load_state_dict(load_checkpoint_or_weights(init_weights, map_location=device_obj)['model_state_dict'], strict=False)
         else:
             # Load checkpoint from previous stage, if not the first stage
             if stage == 1:
@@ -53,7 +53,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                 prev_weights_filename = os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
                 if os.path.isfile(prev_weights_filename):
                     tqdm.write(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
-                    weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE))
+                    weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=device_obj)
                     model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                 else:
                     tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))

@@ -23,7 +23,7 @@ def benchmark(weights, dataset_split, device, device_obj, num_workers, batch_siz
     model = DSRL(stage=1).eval()
 
     # Load specified weights file
-    model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
+    model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=True)
 
     # Copy the model into 'device_obj'
     model = model.to(device_obj)
