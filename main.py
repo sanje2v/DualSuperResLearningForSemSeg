@@ -23,13 +23,8 @@ def main(profiler, **args):
     if args['command'] == 'resume-train':
         checkpoint_dict = load_checkpoint_or_weights(args['checkpoint'])
 
-        variable_names_to_restore =\
-            ['device', 'disable_cudnn_benchmark', 'num_workers', 'val_interval', 'checkpoint_interval', 'checkpoint_history',
-             'init_weights', 'batch_size', 'epochs', 'learning_rate', 'end_learning_rate', 'momentum', 'weights_decay',
-             'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'description', 'best_validation_dict']
-
-        for variable_name in variable_names_to_restore:
-            args[variable_name] = checkpoint_dict[variable_name]
+        for variable in settings.VARIABLES_IN_CHECKPOINT:
+            args[variable] = checkpoint_dict[variable]
 
     # Check and prepare device, if specified
     if 'device' in args:

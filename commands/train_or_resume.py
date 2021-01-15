@@ -22,7 +22,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                     checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum,
                     weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, description, **other_args):
     # Training and Validation on dataset mode
-    
+
     # Time keeper
     process_start_timestamp = datetime.now()
 
@@ -187,24 +187,30 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                            scheduler=scheduler)
 
             # Log training losses for this epoch to TensorBoard
-            train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss.avg, epoch)
+            train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss, epoch)
             if stage > 1:
-                train_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_train_avg_loss.avg, epoch)
+                train_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_train_avg_loss, epoch)
                 if stage > 2:
-                    train_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_train_avg_loss.avg, epoch)
-                train_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_train_loss.avg, epoch)
+                    train_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_train_avg_loss, epoch)
+                train_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_train_loss, epoch)
 
             # Log learning rate for this epoch to TensorBoard
             train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
 
             # Auto save whole model between 'checkpoint_interval' epochs
             if checkpoint_history > 0 and epoch % checkpoint_interval == 0:
+                # Prepare some variables to save in checkpoint
+                best_validation_dict = None
+                model_state_dict = model.state_dict()
+                optimizer_state_dict = optimizer.state_dict()
+                CE_val_avg_loss = None
+                MSE_val_avg_loss = None
+                FA_val_avg_loss = None
+                Avg_val_loss = None
+
+                checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
                 save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch=epoch),
-                                device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
-                                checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
-                                learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
-                                description=description, freeze_batch_norm=freeze_batch_norm, epoch=epoch, best_validation_dict=best_validation_dict,
-                                ce_train_avg_loss=CE_train_avg_loss.avg, model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
+                                **checkpoint_variables_dict)
                 tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                              settings.CHECKPOINTS_DIR.format(stage=stage))))
 
@@ -231,32 +237,32 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                              logger=val_logger)
 
                 # Save epoch number and total error of best validation and then checkpoint
-                if not best_validation_dict or Avg_val_loss.avg < best_validation_dict['loss']:
+                if not best_validation_dict or Avg_val_loss < best_validation_dict['loss']:
+                    # Prepare some variables to save in checkpoint
                     best_validation_dict['epoch'] = epoch
-                    best_validation_dict['loss'] = Avg_val_loss.avg
+                    best_validation_dict['loss'] = Avg_val_loss
+                    model_state_dict = model.state_dict()
+                    optimizer_state_dict = optimizer.state_dict()
 
+                    checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
                     save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch='_bestval'),
-                                    device=device, num_workers=num_workers, val_interval=val_interval, checkpoint_interval=checkpoint_interval,
-                                    checkpoint_history=checkpoint_history, init_weights=init_weights, batch_size=batch_size, epochs=epochs,
-                                    learning_rate=learning_rate, momentum=momentum, weights_decay=weights_decay, poly_power=poly_power, stage=stage, w1=w1, w2=w2,
-                                    description=description, epoch=epoch, best_validation_dict=best_validation_dict, ce_train_avg_loss=CE_train_avg_loss.avg,
-                                    model_state_dict=model.state_dict(), optimizer_state_dict=optimizer.state_dict())
+                                    **checkpoint_variables_dict)
 
                 # Log validation losses for this epoch to TensorBoard
-                val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss.avg, epoch)
+                val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss, epoch)
                 if stage > 1:
-                    val_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_val_avg_loss.avg, epoch)
+                    val_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_val_avg_loss, epoch)
                     if stage > 2:
-                        val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss.avg, epoch)
-                    val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss.avg, epoch)
+                        val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss, epoch)
+                    val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss, epoch)
 
             # Calculate new learning rate for next epoch
             scheduler.step()
 
             # Print estimated time for training completion
             training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds())
-            training_epoch_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
-            tqdm.write("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_timetaken * (epochs - epoch))))
+            training_epoch_avg_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
+            tqdm.write("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
 
         # Save training weights for this stage
         save_weights(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE, model)
@@ -305,6 +311,8 @@ def _do_train_val(do_train,
                                                  leave=False,
                                                  bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         if not do_train:
+            # NOTE: We randomly select a batch index in validation to save input image and model's output
+            #   to save in TensorBoard log.
             RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader)//batch_size)
 
         for i, ((input_scaled, input_org), target) in enumerate(data_loader):
@@ -345,16 +353,14 @@ def _do_train_val(do_train,
 
             # Convert loss tensors to float on CPU memory
             CE_loss = CE_loss.item()
-            MSE_loss = MSE_loss.item() if stage > 1 else None
-            FA_loss = FA_loss.item() if stage > 2 else None
+            MSE_loss = MSE_loss.item()
+            FA_loss = FA_loss.item()
             total_loss = total_loss.item()
 
             # Compute averages for losses
             CE_avg_loss.update(CE_loss, batch_size)
-            if stage > 1:
-                MSE_avg_loss.update(MSE_loss, batch_size)
-                if stage > 2:
-                    FA_avg_loss.update(FA_loss, batch_size)
+            MSE_avg_loss.update(MSE_loss, batch_size)
+            FA_avg_loss.update(FA_loss, batch_size)
             Avg_loss.update(total_loss, batch_size)
 
             # Add loss information to progress bar
@@ -372,7 +378,7 @@ def _do_train_val(do_train,
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
                 SSSR_output = SSSR_output.detach().cpu().numpy()[0]    # Bring back result to CPU memory and select first in batch
-                input_org = input_org.mul_(cityscapes_settings.DATASET_STD).add_(cityscapes_settings.DATASET_MEAN).detach().cpu().numpy()
+                input_org = input_org.mul_(cityscapes_settings.DATASET_STD).add_(cityscapes_settings.DATASET_MEAN).detach().cpu().numpy()[0]
                 logger.add_image("EXAMPLE",
                                  make_output_visualization(SSSR_output, input_org, DSRL.MODEL_OUTPUT_SIZE, cityscapes_settings.CLASS_RGB_COLOR))
 
@@ -388,12 +394,10 @@ def _do_train_val(do_train,
         log_string = ', '.join(log_string)
         tqdm.write(log_string)
 
-    return CE_avg_loss, MSE_avg_loss, FA_avg_loss, Avg_loss
+    return CE_avg_loss.avg, MSE_avg_loss.avg, FA_avg_loss.avg, Avg_loss.avg
 
 
 def _write_params_file(filename, *list_params):
+    list_params = list(filter(lambda x: x is not None, list_params))    # Remove all 'None' items
     with open(filename, mode='w') as params_file:
-        for params_str in list_params:
-            if params_str:
-                params_file.write(params_str)
-                params_file.write('\n')     # NOTE: '\n' here automatically converts it to newline for the current platform
+        params_file.write('\n'.join(list_params))   # NOTE: '\n' here automatically converts it to newline for the current platform

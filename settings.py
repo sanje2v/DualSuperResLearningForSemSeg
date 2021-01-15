@@ -23,5 +23,11 @@ LOGS_DIR = os.path.join('logs', 'stage{stage}', '{mode}')
 OUTPUTS_DIR = 'outputs'
 PROFILING_FILE = 'profiling.json'
 DATASETS_DIR = 'datasets'
+VARIABLES_IN_CHECKPOINT =\
+            ['device', 'disable_cudnn_benchmark', 'num_workers', 'val_interval', 'checkpoint_interval', 'checkpoint_history',
+             'init_weights', 'batch_size', 'epochs', 'learning_rate', 'end_learning_rate', 'momentum', 'weights_decay',
+             'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'description', 'best_validation_dict',
+             'CE_train_avg_loss', 'MSE_train_avg_loss', 'FA_train_avg_loss', 'Avg_train_loss', 'CE_val_avg_loss', 'MSE_val_avg_loss',
+             'FA_val_avg_loss', 'Avg_val_loss']
 
 CITYSCAPES_DATASET_DATA_DIR = os.path.join(DATASETS_DIR, 'Cityscapes', 'data')
