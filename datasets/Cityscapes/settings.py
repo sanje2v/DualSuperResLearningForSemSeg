@@ -20,11 +20,11 @@ LABEL_MAPPING_DICT =\
 # NOTE: Color values from 'https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py'
 #       for all the classes where 'ignoreInEval' is False in 'labels' variable.
 CLASS_RGB_COLOR =\
-[
-    (128, 64, 128), (244, 35, 232), (70, 70, 70), (102, 102, 156), (190, 153, 153),\
-    (153, 153, 153), (250, 170, 30), (220, 220, 0), (107, 142, 35), (152, 251, 152),\
-    (70, 130, 180), (220, 20, 60), (255, 0, 0), (0, 0, 142), (0, 0, 70), (0, 60, 100),\
-    (0, 80, 100), (0, 0, 230), (119, 11, 32)
-]
-assert len(CLASS_RGB_COLOR) == DATASET_NUM_CLASSES and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR]),\
+{
+    0: (128, 64, 128), 1: (244, 35, 232), 2: (70, 70, 70), 3: (102, 102, 156), 4: (190, 153, 153),\
+    5: (153, 153, 153), 6: (250, 170, 30), 7: (220, 220, 0), 8: (107, 142, 35), 9: (152, 251, 152),\
+    10: (70, 130, 180), 11: (220, 20, 60), 12: (255, 0, 0), 13: (0, 0, 142), 14: (0, 0, 70), 15: (0, 60, 100),\
+    16: (0, 80, 100), 17: (0, 0, 230), 18: (119, 11, 32), IGNORE_CLASS_LABEL: (0, 0, 0)
+}
+assert len(CLASS_RGB_COLOR.items()) == DATASET_NUM_CLASSES + 1 and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR.values()]),\
     "'CLASS_RGB_COLOR' needs {:d} color values with three RGB color values!".format(DATASET_NUM_CLASSES)

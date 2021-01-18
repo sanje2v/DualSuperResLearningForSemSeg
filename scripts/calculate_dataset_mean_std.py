@@ -36,11 +36,11 @@ def calculate_dataset_mean_std(args):
         batch_std_channels = t.std(input_img, dim=(0, 2, 3))
 
         for channel in range(consts.NUM_RGB_CHANNELS):
-            means[channel].append(batch_mean_channels[channel])
-            stds[channel].append(batch_std_channels[channel])
+            means[channel].append(batch_mean_channels[channel].item())
+            stds[channel].append(batch_std_channels[channel].item())
 
     means = tuple(np.mean(means[channel]) for channel in range(consts.NUM_RGB_CHANNELS))
     stds = tuple(np.mean(stds[channel]) for channel in range(consts.NUM_RGB_CHANNELS))
     tqdm.write("\n---- RESULTS ---")
-    tqdm.write("Avg mean: ({0:.5f}, {1:.5f}, {2:.5f})".format(*means))
-    tqdm.write("Avg standard deviation: ({0:.5f}, {1:.5f}, {2:.5f})".format(*stds))
+    tqdm.write("Avg. mean: ({0:.5f}, {1:.5f}, {2:.5f})".format(*means))
+    tqdm.write("Avg. standard deviation: ({0:.5f}, {1:.5f}, {2:.5f})".format(*stds))

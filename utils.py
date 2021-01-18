@@ -47,9 +47,9 @@ class timethis:
         self.start_time = datetime.now()
         return self
 
-    def __exit__(self):
+    def __exit__(self, type, value, traceback):
         time_elasped = (datetime.now() - self. start_time).total_seconds()
-        tqdm.write(message.format(makeSecondsPretty(time_elasped)))
+        tqdm.write(self.message.format(makeSecondsPretty(time_elasped)))
 
 
 def INFO(text):
@@ -112,17 +112,14 @@ def save_weights(dir, filename, model):
     os.makedirs(dir, exist_ok=True)
     t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
 
-def make_output_visualization(SSSR_output, input_image, model_output_size, class_rgb_color, blend_factor=0.3):
-    assert SSSR_output.shape == input_image.shape
+def make_input_output_visualization(input_image, output_map, class_rgb_color, blend_factor=0.4):
+    assert input_image.shape[-2:] == output_map.shape[-2:] and len(input_image.shape) == 3 and len(output_map.shape) == 2
 
-    output_image = np.zeros((model_output_size[0], model_output_size[1] * 3, consts.NUM_RGB_CHANNELS), dtype=np.uint8)
-    argmax_map = np.argmax(SSSR_output, axis=0)
-    
-    for y in range(model_output_size[0]):
-        for x in range(model_output_size[1]):
-            output_image[y, x, :] = input_image.getpixel((x, y))
-            output_image[y, x + model_output_size[1], :] = class_rgb_color[(argmax_map[y, x])]
+    input_image = input_image.astype(np.uint8)
+    output_image = np.empty_like(input_image)
+    for y in range(input_image.shape[1]):
+        for x in range(input_image.shape[2]):
+            output_image[:, y, x] = class_rgb_color[output_map[y, x]]
+    overlayed_image = np.array(np.clip((1. - blend_factor) * input_image + blend_factor * output_image, a_min=0.0, a_max=255.), dtype=input_image.dtype)
 
-            blended_pixels = (1. - blend_factor) * output_image[y, x, :] + blend_factor * output_image[y, x + model_output_size[1], :]
-            output_image[y, 2*x + model_output_size[1], :] = np.clip(blended_pixels, a_min=0, a_max=255).astype(np.uint8)
-    return output_image
+    return np.concatenate((input_image, output_image, overlayed_image), axis=2)

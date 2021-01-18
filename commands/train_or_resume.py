@@ -382,10 +382,13 @@ def _do_train_val(do_train,
 
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
-                SSSR_output = SSSR_output.detach().cpu().numpy()[0]    # Bring back result to CPU memory and select first in batch
-                input_org = input_org.mul_(cityscapes_settings.DATASET_STD).add_(cityscapes_settings.DATASET_MEAN).detach().cpu().numpy()[0]
+                input_org = input_org.detach().cpu().numpy()[0]
+                input_org = (input_org.transpose((1, 2, 0)) * cityscapes_settings.DATASET_STD) + cityscapes_settings.DATASET_MEAN
+                input_org = input_org.transpose((2, 0, 1))
+                input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
+                SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
                 logger.add_image("EXAMPLE",
-                                 make_output_visualization(SSSR_output, input_org, DSRL.MODEL_OUTPUT_SIZE, cityscapes_settings.CLASS_RGB_COLOR))
+                                 make_input_output_visualization(input_org, SSSR_output, cityscapes_settings.CLASS_RGB_COLOR))
 
         # Show learning rate and average losses before ending epoch
         log_string = []

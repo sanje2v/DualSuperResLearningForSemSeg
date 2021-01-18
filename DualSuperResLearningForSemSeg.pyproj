@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>46aa911d-f2c5-4be4-a319-11599f9e7db8</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>main.py</StartupFile>
+    <StartupFile>run_script.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 200 --description "Stage 1 training with 200 epochs" --batch-size 4 --num-workers 0 --device cpu --val-interval 5 --checkpoint-interval 5</CommandLineArguments>
+    <CommandLineArguments>show_augmented_inputs_outputs --shuffle</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
@@ -135,6 +135,9 @@
     </Compile>
     <Compile Include="scratchpad.py" />
     <Compile Include="scripts\calculate_dataset_mean_std.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="scripts\show_augmented_inputs_outputs.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="scripts\__init__.py">
