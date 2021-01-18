@@ -130,7 +130,16 @@
     <Compile Include="models\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="run_script.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="scratchpad.py" />
+    <Compile Include="scripts\calculate_dataset_mean_std.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="scripts\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="settings.py">
       <SubType>Code</SubType>
     </Compile>
@@ -152,6 +161,7 @@
     <Folder Include="models\transforms\" />
     <Folder Include="metrices\" />
     <Folder Include="commands\" />
+    <Folder Include="scripts\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />
   </ItemGroup>

@@ -9,10 +9,6 @@ import torch as t
 import torchvision as tv
 
 import commands
-from models import DSRL
-from models.schedulers import PolynomialLR
-from models.losses import FALoss
-from models.transforms import *
 from utils import *
 import settings
 
@@ -44,7 +40,7 @@ def main(profiler, **args):
     else:
         # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
         #   Hence, the following 'replace()' is required.
-        command_func_to_call = getattr(commands, args['command'].replace('-', '_'))
+        command_func_to_call = getattr(commands, args['command'].replace('-', '_'), None)
         assert command_func_to_call, "BUG CHECK: Command '{:s}' does not have any implementation under 'commands' package.".format(args['command'])
         command_func_to_call(**args)
 

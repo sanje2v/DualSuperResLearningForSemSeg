@@ -1,3 +1,4 @@
+import gc
 import os
 import os.path
 from tqdm.auto import tqdm as tqdm
@@ -163,6 +164,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
         log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
         tqdm.write('\n' + INFO(log_string))
 
+        gc.collect()    # Let's free as much unreferenced variables memory as possible before starting training
         training_epoch_timetaken_list = []
         for epoch in range((starting_epoch + 1), (epochs + 1)):
             log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
@@ -305,7 +307,7 @@ def _do_train_val(do_train,
     Avg_loss = AverageMeter('Avg. Loss')
 
     with t.set_grad_enabled(mode=do_train), tqdm(total=len(data_loader),
-                                                 desc='TRAINING' if do_train else 'VALIDATION',
+                                                 desc='TRAINING' if do_train else 'VALIDATING',
                                                  colour='green' if do_train else 'yellow',
                                                  position=0 if do_train else 1,
                                                  leave=False,
@@ -331,10 +333,10 @@ def _do_train_val(do_train,
             if do_train:
                 optimizer.zero_grad()
 
-            SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model.forward(input_scaled)
+            SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
             assert not (t.isnan(SSSR_output).any().item()),\
-                FATAL("SSSR network output contains 'NaN' values and so cannot continue")
+                FATAL("SSSR network output contains 'NaN' values and so cannot continue.")
             assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()),\
                 FATAL("SISSR network output contains 'NaN' values and so cannot continue.")
             assert not (False if SSSR_transform_output is None else t.isnan(SSSR_transform_output).any().item()),\
@@ -358,10 +360,13 @@ def _do_train_val(do_train,
             total_loss = total_loss.item()
 
             # Compute averages for losses
-            CE_avg_loss.update(CE_loss, batch_size)
-            MSE_avg_loss.update(MSE_loss, batch_size)
-            FA_avg_loss.update(FA_loss, batch_size)
-            Avg_loss.update(total_loss, batch_size)
+            # CAUTION: During training, 'drop_last' argument of 'DataLoader' will be True, so
+            #          the number of batched input might NOT be equal to 'batch_size'. Hence, to
+            #          avoid small error while averaging errors we use 'input_scaled.shape[0]' instead.
+            CE_avg_loss.update(CE_loss, input_scaled.shape[0])
+            MSE_avg_loss.update(MSE_loss, input_scaled.shape[0])
+            FA_avg_loss.update(FA_loss, input_scaled.shape[0])
+            Avg_loss.update(total_loss, input_scaled.shape[0])
 
             # Add loss information to progress bar
             log_string = []

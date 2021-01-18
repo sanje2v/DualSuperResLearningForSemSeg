@@ -4,7 +4,7 @@ import platform
 import ctypes
 import termcolor
 from tqdm.auto import tqdm as tqdm
-from datetime import datetime, timedelta
+from datetime import datetime
 import torch as t
 import numpy as np
 
@@ -19,7 +19,7 @@ def timeit(message=None, label='default'):
     now = datetime.now()
     if label in _starttimes_dict and message:
         difftime = now - _starttimes_dict[label]
-        print("{0:s}: {1:.3f} secs".format(label, difftime.total_seconds()))
+        tqdm.write("{0:s}: {1:.3f} secs".format(label, difftime.total_seconds()))
     _starttimes_dict[label] = now
     return difftime
 
