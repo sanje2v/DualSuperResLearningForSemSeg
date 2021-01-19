@@ -8,7 +8,6 @@ from PIL import Image, ImageOps
 
 from models import DSRL
 from utils import *
-import consts
 import settings
 from datasets.Cityscapes import settings as cityscapes_settings
 
@@ -28,12 +27,13 @@ def test(image_file, weights, device, device_obj, **other_args):
     # Load image file, rotate according to EXIF info, add 'batch' dimension and convert to tensor
     with ImageOps.exif_transpose(Image.open(image_file))\
             .convert('RGB')\
-            .resize(swapTupleValues(DSRL.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image, timethis(INFO("Inference required {:}.")), t.no_grad():
-        input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                 tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
-                                                 tv.transforms.Resize(size=DSRL.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
-                                                 tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
-        SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(device_obj))
+            .resize(swapTupleValues(DSRL.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
+        with timethis(INFO("Inference required {:}.")), t.no_grad():
+            input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
+                                                     tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
+                                                     tv.transforms.Resize(size=DSRL.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
+                                                     tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
+            SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(device_obj))
 
         input_image = np.array(input_image, dtype=np.uint8).transpose((2, 0, 1))
         SSSR_output = np.argmax(np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0), axis=0)    # Bring back result to CPU memory and convert to index array

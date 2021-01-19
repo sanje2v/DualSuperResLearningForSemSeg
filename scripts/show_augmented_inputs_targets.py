@@ -13,7 +13,7 @@ import settings
 import consts
 
 
-def show_augmented_inputs_outputs(args):
+def show_augmented_inputs_targets(args):
     parser = argparse.ArgumentParser(description="Show augmented inputs fed to model and target outputs during training.")
     parser.add_argument('--shuffle', action='store_true')
     args = parser.parse_args(args)

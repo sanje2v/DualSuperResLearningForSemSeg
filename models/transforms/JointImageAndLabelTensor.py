@@ -4,16 +4,10 @@ from PIL import Image
 import numpy as np
 import numba as nb
 
+from utils import *
+
 
 class JointImageAndLabelTensor(t.nn.Module):
-    @staticmethod
-    def _convertDictToNumbaDict(py_dict, oftype):
-        numba_dict = nb.typed.Dict.empty(oftype, oftype)
-
-        for key, value in py_dict.items():
-            numba_dict[key] = value
-        return numba_dict
-
     @staticmethod
     @nb.jit(nopython=True, parallel=True, cache=True, inline='always')
     def _acceleratedRemap(seg, label_mapping_dict):
@@ -36,7 +30,7 @@ class JointImageAndLabelTensor(t.nn.Module):
         super().__init__()
 
         # NOTE: Python 'dict' type is not supported by Numba v0.52 so we convert it to 'numba.typed.Dict' type
-        self.label_mapping_dict = JointImageAndLabelTensor._convertDictToNumbaDict(label_mapping_dict, nb.types.int64)
+        self.label_mapping_dict = convertDictToNumbaDict(label_mapping_dict, nb.types.int64)
 
     def forward(self, img, seg):
         return tv.transforms.ToTensor()(img), self._PILToClassLabelLongTensor(seg)

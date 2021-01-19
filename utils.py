@@ -7,8 +7,9 @@ from tqdm.auto import tqdm as tqdm
 from datetime import datetime
 import torch as t
 import numpy as np
+import numba as nb
 
-import consts
+
 
 
 _starttimes_dict = {'default': datetime.now()}
@@ -24,18 +25,14 @@ def timeit(message=None, label='default'):
     return difftime
 
 def makeSecondsPretty(time_elasped):
-    if time_elasped >= 86400.:
-        time_elasped /= 86400.
-        time_elasped_unit = 'days'
-    elif time_elasped >= 3600.:
-        time_elasped /= 3600.
-        time_elasped_unit = 'hrs'
-    elif time_elasped >= 60.:
-        time_elasped /= 60.
-        time_elasped_unit = 'mins'
-    else:
-        time_elasped_unit = 'secs'
+    SECS_BOUND_WITH_UNIT = [(86400., 'days'), (3600., 'hrs'), (60., 'mins')]
 
+    time_elasped_unit = 'secs'  # Else
+    for secs_bound, unit in SECS_BOUND_WITH_UNIT:
+        if time_elasped >= secs_bound:
+            time_elasped /= secs_bound
+            time_elasped_unit = unit
+            break
     return "{0:.2f} {1:s}".format(time_elasped, time_elasped_unit)
 
 class timethis:
@@ -48,7 +45,7 @@ class timethis:
         return self
 
     def __exit__(self, type, value, traceback):
-        time_elasped = (datetime.now() - self. start_time).total_seconds()
+        time_elasped = (datetime.now() - self.start_time).total_seconds()
         tqdm.write(self.message.format(makeSecondsPretty(time_elasped)))
 
 
@@ -90,6 +87,14 @@ def hasExtension(filename, extension):
     return os.path.splitext(filename)[-1].lower() == extension.lower()
 
 
+def convertDictToNumbaDict(py_dict, oftype):
+    numba_dict = nb.typed.Dict.empty(oftype, oftype)
+
+    for key, value in py_dict.items():
+        numba_dict[key] = value
+    return numba_dict
+
+
 def isCUDAdevice(device):
     return device.startswith(('gpu', 'cuda'))
 
@@ -120,6 +125,7 @@ def make_input_output_visualization(input_image, output_map, class_rgb_color, bl
     for y in range(input_image.shape[1]):
         for x in range(input_image.shape[2]):
             output_image[:, y, x] = class_rgb_color[output_map[y, x]]
-    overlayed_image = np.array(np.clip((1. - blend_factor) * input_image + blend_factor * output_image, a_min=0.0, a_max=255.), dtype=input_image.dtype)
+    overlayed_image = np.array(np.clip((1. - blend_factor) * input_image + blend_factor * output_image, a_min=0.0, a_max=255.),
+                               dtype=input_image.dtype)
 
     return np.concatenate((input_image, output_image, overlayed_image), axis=2)

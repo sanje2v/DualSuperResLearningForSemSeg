@@ -14,7 +14,7 @@
     <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>show_augmented_inputs_outputs --shuffle</CommandLineArguments>
+    <CommandLineArguments>show_augmented_inputs_targets --shuffle</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
@@ -137,7 +137,7 @@
     <Compile Include="scripts\calculate_dataset_mean_std.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="scripts\show_augmented_inputs_outputs.py">
+    <Compile Include="scripts\show_augmented_inputs_targets.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="scripts\__init__.py">
