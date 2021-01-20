@@ -93,7 +93,7 @@ if __name__ == '__main__':
         test_source = test_parser.add_mutually_exclusive_group(required=True)
         test_source.add_argument('--image-file', type=str, help="Run evaluation on a image file using trained weights")
         test_source.add_argument('--images-dir', type=str, help="Run evaluation on image files (JPG and PNG) in specified directory")
-        test_source.add_argument('--dataset', type=lambda x: int(x) if x.isnumeric() else x, nargs=2, metavar=('SPLIT', 'STARTING_INDEX'), default=['test', '0'], help="Run evaluation on dataset split starting from specified index")
+        test_source.add_argument('--dataset', type=lambda x: int(x) if x.isnumeric() else x, nargs=2, metavar=('SPLIT', 'STARTING_INDEX'), default='test 0', help="Run evaluation on dataset split starting from specified index")
         test_parser.add_argument('--output-dir', type=str, default=settings.OUTPUTS_DIR, help="Specify directory where testing results are saved")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
