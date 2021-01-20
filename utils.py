@@ -66,6 +66,13 @@ def check_version(version, major, minor):
     return version[0] >= major and version[1] >= minor
 
 
+def getFilesWithExtension(dir, extension_or_tuple, with_path=False):
+    if not type(extension_or_tuple) is tuple:
+        extension_or_tuple = (extension_or_tuple,)
+    extension_or_tuple = tuple(x.lower() for x in extension_or_tuple)
+    return [(os.path.join(dir, f) if with_path else f) for f in os.listdir(dir) if f.lower().endswith(extension_or_tuple)]
+
+
 def prevent_system_sleep():
     # NOTE: Only Windows OS supported for automatic system sleep disable until process ends function.
     #       For other OSes, the user should be advised to do so through their system settings.
@@ -118,7 +125,8 @@ def save_weights(dir, filename, model):
     t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
 
 def make_input_output_visualization(input_image, output_map, class_rgb_color, blend_factor=0.4):
-    assert input_image.shape[-2:] == output_map.shape[-2:] and len(input_image.shape) == 3 and len(output_map.shape) == 2
+    assert input_image.shape[-2:] == output_map.shape[-2:]
+    assert len(input_image.shape) == 3 and len(output_map.shape) == 2
 
     input_image = input_image.astype(np.uint8)
     output_image = np.empty_like(input_image)

@@ -15,6 +15,7 @@ from models.transforms import *
 from metrices import *
 from utils import *
 import settings
+import consts
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
@@ -297,7 +298,7 @@ def _do_train_val(do_train,
     # If training and freeze BatchNorm layer option is ON, then freeze them
     if do_train and freeze_batch_norm:
         for module in model.modules():
-            if isinstance(module, (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d)):
+            if isinstance(module, (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm)):
                 module.eval()
 
     # Losses to report
@@ -383,8 +384,8 @@ def _do_train_val(do_train,
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
                 input_org = input_org.detach().cpu().numpy()[0]
-                input_org = (input_org.transpose((1, 2, 0)) * cityscapes_settings.DATASET_STD) + cityscapes_settings.DATASET_MEAN
-                input_org = input_org.transpose((2, 0, 1))
+                input_org = np.array(cityscapes_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
+                            np.array(cityscapes_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                 input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                 SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
                 logger.add_image("EXAMPLE",

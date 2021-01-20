@@ -31,21 +31,21 @@ All commands are invoked via `main.py` script. For instance to train, you would 
 Perform training on the '*train*' split of **Cityscapes dataset**.
 
 *Example usage:*
-`python main.py train --stage 1 --description "Stage 1 training" --epochs 200 --batch_size 6 --device gpu --checkpoint_history 40 --num_workers 4 --val_interval 5` 
+`python main.py train --stage 1 --description "Stage 1 training" --epochs 200 --batch-size 6 --device gpu --checkpoint-history 40 --num-workers 4 --val-interval 5` 
 
 
 ## Resume training
 Resume training from an interrupted session using checkpoint file (that have '.checkpoint' extension and are autosaved under './weights/checkpoints').
 
 *Example usage:*
-`python main.py resume_train --checkpoint ./weights/checkpoints/epoch50.checkpoint`
+`python main.py resume-train --checkpoint ./weights/checkpoints/epoch50.checkpoint`
 
 
 ## Testing
 Perform inference on a specified image file with specified weights and shows result as well as saves it to a file.
 
 *Example usage:*
-`python main.py test --image_file ~/Pictures/input.jpg --weights ./weights/stage3/final.weights --device gpu`
+`python main.py test --image-file ~/Pictures/input.jpg --weights ./weights/stage3/final.weights --device gpu`
 
 The result of the inference is saved in `./outputs/<image_filename>.png`.
 
@@ -54,28 +54,28 @@ The result of the inference is saved in `./outputs/<image_filename>.png`.
 Weights trained in stage 2 and 3 will have weights for parts of model not needed for inference. So, weights pruning will remove all these weights.
 
 *Example usage:*
-`python main.py prune_weights --src_weights ./weights/stage3/checkpoints/epoch50.checkpoint --dest_weights ./output/inference.weights`
+`python main.py prune-weights --src-weights ./weights/stage3/checkpoints/epoch50.checkpoint --dest-weights ./output/inference.weights`
 
 
 ## Inspect checkpoint
 View the keys and values dictionary pairs in the specified checkpoint file.
 
 *Example usage:*
-`python main.py inspect_checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint`
+`python main.py inspect-checkpoint --checkpoint ./weights/stage2/checkpoints/epoch20.checkpoint`
 
 
 ## Edit checkpoint
 Edit dictionary of the specified checkpoint file.
 
 *Example usage:*
-`python main.py edit_checkpoint --checkpoint ./weights/stage2/test.checkpoint --key device --value cpu --typeof str`
+`python main.py edit-checkpoint --checkpoint ./weights/stage2/test.checkpoint --key device --value cpu --typeof str`
 
 
 ## Benchmark
 You can run benchmarking for semantic segmentation using specified weights/checkpoint on specified split of dataset.
 
 *Example usage:*
-`python main.py benchmark --weights ./weights/stage3/final.weights --dataset_split test --device gpu`
+`python main.py benchmark --weights ./weights/stage3/final.weights --dataset-split test --device gpu`
 
 The result of the benchmark is saved in `./outputs/benchmark.txt`.
 

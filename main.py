@@ -90,14 +90,18 @@ if __name__ == '__main__':
 
         # Evaluation arguments
         test_parser = command_parser.add_parser('test', help="Test trained weights with a single input image")
-        test_parser.add_argument('--image-file', type=str, required=True, help="Run evaluation on a image file using trained weights")
+        test_source = test_parser.add_mutually_exclusive_group(required=True)
+        test_source.add_argument('--image-file', type=str, help="Run evaluation on a image file using trained weights")
+        test_source.add_argument('--images-dir', type=str, help="Run evaluation on image files (JPG and PNG) in specified directory")
+        test_source.add_argument('--dataset', type=lambda x: int(x) if x.isnumeric() else x, nargs=2, metavar=('SPLIT', 'STARTING_INDEX'), default=['test', '0'], help="Run evaluation on dataset split starting from specified index")
+        test_parser.add_argument('--output-dir', type=str, default=settings.OUTPUTS_DIR, help="Specify directory where testing results are saved")
         test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
 
         # Print model arguments
-        print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model for a stage")
+        print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
         print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
 
         # Purne weights arguments
@@ -192,8 +196,11 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("Couldn't find checkpoint file '{0:s}'!".format(args.checkpoint))
 
         elif args.command == 'test':
-            if not os.path.isfile(args.image_file):
+            if args.image_file and not os.path.isfile(args.image_file):
                 raise argparse.ArgumentTypeError("File specified in '--image-file' parameter doesn't exists!")
+
+            if args.images_dir and not os.path.isdir(args.images_dir):
+                raise argparse.ArgumentTypeError("Directory specified in '--images-dir' parameter doesn't exists!")
 
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")

@@ -40,12 +40,13 @@ def show_augmented_inputs_targets(args):
                                           pin_memory=False,
                                           drop_last=False)
 
-    print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
+    tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
     try:
         for i, ((_, input_image), target_map) in enumerate(data_loader):
+            print("Creating visualization...")
             input_image = input_image.numpy()[0]
-            input_image = (input_image.transpose((1, 2, 0)) * cityscapes_settings.DATASET_STD) + cityscapes_settings.DATASET_MEAN
-            input_image = input_image.transpose((2, 0, 1))
+            input_image = np.array(cityscapes_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
+                          np.array(cityscapes_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
             input_image = np.clip(input_image * 255., a_min=0.0, a_max=255.).astype(np.uint8)
             target_map = target_map.numpy()[0]
 
