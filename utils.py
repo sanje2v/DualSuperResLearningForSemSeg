@@ -11,7 +11,6 @@ import numba as nb
 
 
 
-
 _starttimes_dict = {'default': datetime.now()}
 def timeit(message=None, label='default'):
     global _starttimes_dict
@@ -94,13 +93,19 @@ def hasExtension(filename, extension):
     return os.path.splitext(filename)[-1].lower() == extension.lower()
 
 
-def convertDictToNumbaDict(py_dict, oftype):
-    numba_dict = nb.typed.Dict.empty(oftype, oftype)
+def convertDictToNumbaDict(py_dict, key_type, value_type):
+    nb_dict = nb.typed.Dict.empty(key_type, value_type)
 
     for key, value in py_dict.items():
-        numba_dict[key] = value
-    return numba_dict
+        nb_dict[key] = value
+    return nb_dict
 
+def convertListToNumbaList(py_list, item_type):
+    nb_list = nb.typed.List.empty_list(item_type)
+
+    for item in py_list:
+        nb_list.append(item)
+    return nb_list
 
 def isCUDAdevice(device):
     return device.startswith(('gpu', 'cuda'))
@@ -127,13 +132,22 @@ def save_weights(dir, filename, model):
 def make_input_output_visualization(input_image, output_map, class_rgb_color, blend_factor=0.4):
     assert input_image.shape[-2:] == output_map.shape[-2:]
     assert len(input_image.shape) == 3 and len(output_map.shape) == 2
+    assert blend_factor > 0.0 and blend_factor < 1.0
 
     input_image = input_image.astype(np.uint8)
     output_image = np.empty_like(input_image)
-    for y in range(input_image.shape[1]):
-        for x in range(input_image.shape[2]):
-            output_image[:, y, x] = class_rgb_color[output_map[y, x]]
-    overlayed_image = np.array(np.clip((1. - blend_factor) * input_image + blend_factor * output_image, a_min=0.0, a_max=255.),
-                               dtype=input_image.dtype)
+    overlayed_image = np.empty_like(output_image)
+    arch_int_dtype = nb.intp    # Numba complains with warning if integer size is not same to architecture default int size
+    class_rgb_color = dict((key, convertListToNumbaList(class_rgb_color[key], arch_int_dtype)) for key, value in class_rgb_color.items())
+    class_rgb_color = convertDictToNumbaDict(class_rgb_color, arch_int_dtype, nb.types.ListType(arch_int_dtype))
 
-    return np.concatenate((input_image, output_image, overlayed_image), axis=2)
+    @nb.jit(nopython=True, parallel=True, cache=True, inline='always')
+    def _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color):
+        for channel in nb.prange(input_image.shape[0]):
+            for y in nb.prange(input_image.shape[1]):
+                for x in nb.prange(input_image.shape[2]):
+                    output_image[channel, y, x] = class_rgb_color[output_map[y, x]][channel]
+                    overlayed_image[channel, y, x] = nb.uint8((1. - blend_factor) * input_image[channel, y, x] +\
+                                                               blend_factor * output_image[channel, y, x] + 0.5)
+        return np.concatenate((input_image, output_image, overlayed_image), axis=2)
+    return _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color)

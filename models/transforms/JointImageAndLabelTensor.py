@@ -30,7 +30,7 @@ class JointImageAndLabelTensor(t.nn.Module):
         super().__init__()
 
         # NOTE: Python 'dict' type is not supported by Numba v0.52 so we convert it to 'numba.typed.Dict' type
-        self.label_mapping_dict = convertDictToNumbaDict(label_mapping_dict, nb.types.int64)
+        self.label_mapping_dict = convertDictToNumbaDict(label_mapping_dict, nb.types.int64, nb.types.int64)
 
     def forward(self, img, seg):
         return tv.transforms.ToTensor()(img), self._PILToClassLabelLongTensor(seg)
