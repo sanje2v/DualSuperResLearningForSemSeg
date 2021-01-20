@@ -202,6 +202,12 @@ if __name__ == '__main__':
             if args.images_dir and not os.path.isdir(args.images_dir):
                 raise argparse.ArgumentTypeError("Directory specified in '--images-dir' parameter doesn't exists!")
 
+            if args.dataset and not args.dataset[0] in settings.DATASET_SPLITS:
+                raise argparse.ArgumentTypeError("Dataset split must be one of {:s}!".format(", ".join(settings.DATASET_SPLITS)))
+
+            if args.dataset and not type(args.dataset[1]) is int:
+                raise argparse.ArgumentTypeError("Dataset starting index must be an integer that is equal or greater than 0!")
+
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
 
