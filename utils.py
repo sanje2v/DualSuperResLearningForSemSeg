@@ -142,12 +142,12 @@ def make_input_output_visualization(input_image, output_map, class_rgb_color, bl
     class_rgb_color = convertDictToNumbaDict(class_rgb_color, arch_int_dtype, nb.types.ListType(arch_int_dtype))
 
     @nb.jit(nopython=True, parallel=True, cache=True, inline='always')
-    def _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color):
+    def _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color, dtype):
         for channel in nb.prange(input_image.shape[0]):
             for y in nb.prange(input_image.shape[1]):
                 for x in nb.prange(input_image.shape[2]):
                     output_image[channel, y, x] = class_rgb_color[output_map[y, x]][channel]
-                    overlayed_image[channel, y, x] = nb.uint8((1. - blend_factor) * input_image[channel, y, x] +\
-                                                               blend_factor * output_image[channel, y, x] + 0.5)
+                    overlayed_image[channel, y, x] = dtype(min((1. - blend_factor) * input_image[channel, y, x] +\
+                                                               blend_factor * output_image[channel, y, x], 255))
         return np.concatenate((input_image, output_image, overlayed_image), axis=2)
-    return _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color)
+    return _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color, input_image.dtype.type)
