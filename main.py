@@ -270,7 +270,6 @@ if __name__ == '__main__':
 
         with t.autograd.profiler.profile(enabled=getattr(args, 'profile', False),
                                          use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
-                                         record_shapes=True,
                                          profile_memory=True) as profiler:
             # Do action in 'command'
             main(profiler, **args.__dict__)
@@ -280,7 +279,7 @@ if __name__ == '__main__':
         tqdm.write(CAUTION("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
 
     except argparse.ArgumentTypeError as ex:
-        tqdm.write(FATAL("{:s}".format(str(ex))))
+        tqdm.write(FATAL("{:s}\n".format(str(ex))))
         parser.print_usage()
 
     finally:
