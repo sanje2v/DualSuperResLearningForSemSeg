@@ -11,7 +11,7 @@ import consts
 
 def calculate_dataset_mean_std(args):
     parser = argparse.ArgumentParser(description="Calculate mean and standard deviation from the dataset's specified split.")
-    parser.add_argument('--dataset-split', default='train', choices=['train', 'test', 'val'])
+    parser.add_argument('--dataset-split', default='train', choices=settings.DATASET_SPLITS)
     args = parser.parse_args(args)
 
     dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,

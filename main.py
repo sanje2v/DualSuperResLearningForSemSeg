@@ -123,7 +123,7 @@ if __name__ == '__main__':
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
-        benchmark_parser.add_argument('--dataset-split', type=str.lower, choices=['train', 'test', 'val'], default='test', help="Which dataset's split to benchmark")
+        benchmark_parser.add_argument('--dataset-split', type=str.lower, choices=settings.DATASET_SPLITS, default='test', help="Which dataset's split to benchmark")
         benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         benchmark_parser.add_argument('--num-workers', default=4, type=int, help="Number of workers for data loader")
