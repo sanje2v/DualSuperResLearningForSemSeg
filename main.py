@@ -281,7 +281,6 @@ if __name__ == '__main__':
 
     except argparse.ArgumentTypeError as ex:
         tqdm.write(FATAL("{:s}".format(str(ex))))
-        tqdm.write('\n')
         parser.print_usage()
 
     finally:
