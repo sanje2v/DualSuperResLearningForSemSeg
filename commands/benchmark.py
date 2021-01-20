@@ -19,7 +19,7 @@ def benchmark(weights, dataset_split, device, device_obj, num_workers, batch_siz
     # Time keeper
     process_start_timestamp = datetime.now()
 
-    # Create model and set to evaluation mode disabling all batch normalization layers
+    # Create model and set to evaluation mode
     model = DSRL(stage=1).eval()
 
     # Load specified weights file

@@ -17,7 +17,7 @@ from datasets.Cityscapes import settings as cityscapes_settings
 def test(image_file, images_dir, dataset, output_dir, weights, device, device_obj, **other_args):
     # Testing on a single input image using given weights
 
-    # Create model and set to evaluation mode disabling all batch normalization layers
+    # Create model and set to evaluation mode
     model = DSRL(stage=1).eval()
 
     # Load specified weights file
@@ -82,10 +82,10 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
         with t.no_grad():
             tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
             for i, ((input_scaled, input_org), target) in enumerate(tqdm(loader,
-                                                                 desc='TESTING',
-                                                                 colour='yellow',
-                                                                 position=0,
-                                                                 leave=False)):
+                                                                         desc='TESTING',
+                                                                         colour='yellow',
+                                                                         position=0,
+                                                                         leave=False)):
                 if i >= starting_index:
                     with timethis(INFO("Inference required {:}.")), t.no_grad():
                         SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
