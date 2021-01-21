@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import torch as t
 import torchvision as tv
-from tqdm.auto import tqdm as tqdm
+from tqdm.auto import tqdm
 from PIL import Image
 
 import datasets.Cityscapes.settings as cityscapes_settings

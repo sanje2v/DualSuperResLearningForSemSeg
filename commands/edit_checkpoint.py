@@ -1,5 +1,5 @@
 import os.path
-from tqdm.auto import tqdm as tqdm
+from tqdm.auto import tqdm
 from pydoc import locate as str2type
 
 from utils import *

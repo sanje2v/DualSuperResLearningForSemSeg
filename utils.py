@@ -3,7 +3,7 @@ import os.path
 import platform
 import ctypes
 import termcolor
-from tqdm.auto import tqdm as tqdm
+from tqdm.auto import tqdm
 from datetime import datetime
 import torch as t
 import numpy as np

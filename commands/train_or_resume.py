@@ -1,7 +1,7 @@
 import gc
 import os
 import os.path
-from tqdm.auto import tqdm as tqdm
+from tqdm.auto import tqdm
 import numpy as np
 import torch as t
 import torchvision as tv
