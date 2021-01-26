@@ -2,7 +2,7 @@ import torch as t
 
 
 class ASPP(t.nn.Module):
-    def __init__(self, in_channels, out_channels, rate=1):
+    def __init__(self, in_channels:int, out_channels:int, rate:int=1):
         super().__init__()
 
         branch_params = \
@@ -22,7 +22,7 @@ class ASPP(t.nn.Module):
                                                  t.nn.Dropout(p=0.2)))
         self.avg = t.nn.AdaptiveAvgPool2d(output_size=(1, 1))
 
-    def forward(self, x):
+    def forward(self, x:t.Tensor):
         branch_outputs = [self.branches[i](x) for i in range(4)]
 
         global_feature = self.avg(x)

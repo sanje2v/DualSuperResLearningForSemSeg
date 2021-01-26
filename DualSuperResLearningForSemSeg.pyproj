@@ -30,6 +30,9 @@
     <Compile Include="commands\benchmark.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="commands\compile_model.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="commands\edit_checkpoint.py">
       <SubType>Code</SubType>
     </Compile>
@@ -91,10 +94,13 @@
     <Compile Include="models\modules\ASPP.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\modules\backbone\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\modules\__init__.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="models\ResNet101.py">
+    <Compile Include="models\modules\backbone\ResNet101.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\schedulers\PolynomialLR.py">
@@ -160,6 +166,7 @@
     <Folder Include="models\" />
     <Folder Include="models\losses\" />
     <Folder Include="models\modules\" />
+    <Folder Include="models\modules\backbone\" />
     <Folder Include="models\schedulers\" />
     <Folder Include="models\transforms\" />
     <Folder Include="metrices\" />

@@ -2,7 +2,7 @@ import torch as t
 import torchvision as tv
 
 import consts
-from .ResNet101 import ResNet101
+from .modules.backbone import ResNet101
 from .modules.ASPP import ASPP
 from datasets.Cityscapes import settings as cityscapes_settings
 
@@ -12,7 +12,7 @@ class DSRL(t.nn.Module):
     MODEL_OUTPUT_SIZE = (1024, 2048)
 
     @staticmethod
-    def _define_feature_extractor(in_channels, out_channels1, out_channels2):
+    def _define_feature_extractor(in_channels:int, out_channels1:int, out_channels2:int):
         feature_extractor_modules = \
         {
             'backbone': ResNet101(replace_stride_with_dilation=[False, False, True]),
@@ -31,7 +31,7 @@ class DSRL(t.nn.Module):
         return t.nn.ModuleDict(feature_extractor_modules)
 
     @staticmethod
-    def _define_SSSR_decoder(in_channels1, in_channels2, mid_channels, out_channels):
+    def _define_SSSR_decoder(in_channels1:int, in_channels2:int, mid_channels:int, out_channels:int):
         decoder_modules = \
         {
             'cat_conv': t.nn.Sequential(t.nn.Conv2d(in_channels=(in_channels1+in_channels2),
@@ -75,7 +75,7 @@ class DSRL(t.nn.Module):
         return t.nn.ModuleDict(decoder_modules)
 
     @staticmethod
-    def _define_SISR_decoder(in_channels, out_channels, upscale_factor: int):
+    def _define_SISR_decoder(in_channels:int, out_channels:int, upscale_factor:int):
         assert type(upscale_factor) == int, "BUG CHECK: 'upscale_factor' must be an integer type."
 
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
@@ -87,7 +87,7 @@ class DSRL(t.nn.Module):
                                t.nn.PixelShuffle(upscale_factor=upscale_factor))
 
     @staticmethod
-    def _define_feature_transformer(in_channels, out_channels):
+    def _define_feature_transformer(in_channels:int, out_channels:int):
         return t.nn.Sequential(t.nn.Conv2d(in_channels=in_channels,
                                            out_channels=out_channels,
                                            kernel_size=1,
@@ -98,8 +98,7 @@ class DSRL(t.nn.Module):
                                t.nn.ReLU(inplace=True))
 
 
-    def __init__(self,
-                 stage=None):
+    def __init__(self, stage:int):
         assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRL.__init__().".format(stage)
 
         super().__init__()
@@ -109,36 +108,36 @@ class DSRL(t.nn.Module):
 
         # Feature extractor
         self.feature_extractor = DSRL._define_feature_extractor(in_channels=2048,
-                                                                  out_channels1=256,
-                                                                  out_channels2=48)
+                                                                out_channels1=256,
+                                                                out_channels2=48)
 
         # Semantic Segmentation Super Resolution (SSSR)
         self.SSSR_decoder = DSRL._define_SSSR_decoder(in_channels1=256,
-                                                        in_channels2=48,
-                                                        mid_channels=256,
-                                                        out_channels=cityscapes_settings.DATASET_NUM_CLASSES)
+                                                      in_channels2=48,
+                                                      mid_channels=256,
+                                                      out_channels=cityscapes_settings.DATASET_NUM_CLASSES)
 
         if self.stage > 1:
             # Single Image Super-Resolution (SISR)
             self.SISR_decoder = DSRL._define_SISR_decoder(in_channels=(256+48),
-                                                            out_channels=consts.NUM_RGB_CHANNELS,
-                                                            upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
+                                                          out_channels=consts.NUM_RGB_CHANNELS,
+                                                          upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
 
             if self.stage > 2:
                 # Feature transform module for SSSR
                 self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
-                                                                                   out_channels=1)
+                                                                                 out_channels=1)
 
                 # Feature transform module for SISR
                 self.SISR_feature_transformer = DSRL._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
-                                                                                   out_channels=1)
+                                                                                 out_channels=1)
 
 
     def initialize_with_pretrained_weights(self, weights_dir, map_location=t.device('cpu')):
         self.feature_extractor['backbone'].initialize_with_pretrained_weights(weights_dir, map_location)
 
 
-    def forward(self, x):
+    def forward(self, x:t.Tensor):
         # Extract features
         backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
         aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)
@@ -151,9 +150,9 @@ class DSRL(t.nn.Module):
         SSSR_output = self.SSSR_decoder['cls_conv'](SSSR_output)                        # NOTE: Output size (B, 20, 128, 256)
         SSSR_output = self.SSSR_decoder['upsample16_pred'](SSSR_output)                 # NOTE: Output size (B, 20, 1024, 2048)
 
-        SISR_output = None
-        SSSR_transform_output = None
-        SISR_transform_output = None
+        SISR_output = t.empty(1, requires_grad=False)
+        SSSR_transform_output = t.empty(1, requires_grad=False)
+        SISR_transform_output = t.empty(1, requires_grad=False)
         if self.stage > 1:
             # Single Image Super-Resolution (SISR) decoder
             SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)

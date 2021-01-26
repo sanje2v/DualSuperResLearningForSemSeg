@@ -99,6 +99,7 @@ if __name__ == '__main__':
         test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
+        test_parser.add_argument('--compiled-model', action='store_true', help="Using compiled model in '--weights' made using 'compile-model' command")
 
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
@@ -128,6 +129,11 @@ if __name__ == '__main__':
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         benchmark_parser.add_argument('--num-workers', default=4, type=int, help="Number of workers for data loader")
         benchmark_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for benchmarking")
+
+        # Compile model arguments
+        compile_model_parser = command_parser.add_parser('compile-model', help="Compiles given model using TorchScript and outputs a compiled file")
+        compile_model_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
+        compile_model_parser.add_argument('--output-file', type=str, required=True, help="Output file to compile the model to")
 
 
         # Validate arguments according to mode
@@ -267,6 +273,14 @@ if __name__ == '__main__':
 
             if not args.batch_size > 0:
                 raise argparse.ArgumentTypeError("'--batch-size' should be greater than 0!")
+
+        elif args.command == 'compile-model':
+            if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
+                raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
+
+            if not os.path.isfile(args.weights):
+                raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
+
 
         with t.autograd.profiler.profile(enabled=getattr(args, 'profile', False),
                                          use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
