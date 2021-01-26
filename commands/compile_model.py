@@ -14,9 +14,8 @@ def compile_model(weights, output_file, **other_args):
     # Load specified weights file
     model.load_state_dict(load_checkpoint_or_weights(weights)['model_state_dict'], strict=True)
 
+    tqdm.write(INFO("Tracing model to compile..."))
     with t.jit.optimized_execution(True):
-        tqdm.write(INFO("Tracing model to compile..."))
-        # CAUTION: Make sure batch size is greater than 1 for BatchNorm to NOT complain
-        trace = t.jit.trace(model, t.rand(2, consts.NUM_RGB_CHANNELS, *DSRL.MODEL_INPUT_SIZE))
-        trace.save(output_file)
-        tqdm.write(INFO("Compiled model saved to specified file."))
+        trace = t.jit.trace(model, t.rand(1, consts.NUM_RGB_CHANNELS, *DSRL.MODEL_INPUT_SIZE))
+    trace.save(output_file)
+    tqdm.write(INFO("Compiled model saved to specified file."))

@@ -42,7 +42,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
             with ImageOps.exif_transpose(Image.open(image_filename))\
                     .convert('RGB')\
                     .resize(swapTupleValues(DSRL.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
-                with timethis(INFO("Inference required {:}.")), t.no_grad():
+                with timethis(INFO("Inference required {:}.")), t.no_grad(), t.jit.optimized_execution(should_optimize=compiled_model):
                     input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
                                                              tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
                                                              tv.transforms.Resize(size=DSRL.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
