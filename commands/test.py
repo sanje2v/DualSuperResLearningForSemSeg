@@ -14,14 +14,14 @@ import consts
 from datasets.Cityscapes import settings as cityscapes_settings
 
 
-def test(image_file, images_dir, dataset, output_dir, weights, device, device_obj, compiled_model, **other_args):
+def test(profiler, image_file, images_dir, dataset, output_dir, weights, device, device_obj, compiled_model, **other_args):
     # Testing on a single input image using given weights
 
     if compiled_model:
         model = t.jit.load(weights)
     else:
         # Create model and set to evaluation mode
-        model = DSRL(stage=1).eval()
+        model = DSRL(stage=1, profiler=profiler).eval()
 
         # Load specified weights file
         model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=True)

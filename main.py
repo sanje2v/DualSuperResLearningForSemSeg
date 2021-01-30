@@ -15,6 +15,9 @@ import settings
 
 
 def main(profiler, **args):
+    # Make 'profiler' available to modules so that they can label their code for profiling
+    args['profiler'] = profiler
+
     # Load variables from checkpoint if resuming training
     if args['command'] == 'resume-train':
         checkpoint_dict = load_checkpoint_or_weights(args['checkpoint'])
@@ -82,7 +85,9 @@ if __name__ == '__main__':
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
         train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
+        train_parser.add_argument('--experiment_id', type=str, default='', help="Experiment ID which is used to create a root directory for weights and logs directories")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
+        train_parser.add_argument('--early-stopping', action='store_true', help="Automatically stop training when training error is less than validation error")
 
         # Resume training from checkpoint arguments
         resume_train_parser = command_parser.add_parser('resume-train', help="Resume training model from checkpoint file")
@@ -182,6 +187,13 @@ if __name__ == '__main__':
             if not args.poly_power > 0.:
                 raise argparse.ArgumentTypeError("'--poly-power' should be greater than 0!")
 
+            if args.experiment_id:
+                if isInvalidFilename(args.experiment):
+                    raise argparse.ArgumentTypeError("'--experiment-id' must not contain invalid filename characters ({:s})!".format(', '.join(INVALID_FILENAME_CHARS)))
+
+                if os.path.isdir(args.experiment):
+                    raise argparse.ArgumentTypeError("'--experiment-id' already exists and overwriting experiment directory is not supported!")
+
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
                 answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
@@ -190,9 +202,6 @@ if __name__ == '__main__':
                     shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage))
                 else:
                     sys.exit(0)
-
-            # Enable profiler if '--profile' option is specified
-            do_profiling = args.profile
 
         elif args.command == 'resume-train':
             if not hasExtension(args.checkpoint, '.checkpoint'):
@@ -225,9 +234,6 @@ if __name__ == '__main__':
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
                 raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
-
-            # Enable profiler if '--profile' option is specified
-            do_profiling = args.profile
 
         elif args.command == 'purne-weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
@@ -283,6 +289,7 @@ if __name__ == '__main__':
 
 
         with t.autograd.profiler.profile(enabled=getattr(args, 'profile', False),
+                                         with_stack=True,
                                          use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
                                          profile_memory=True) as profiler:
             # Do action in 'command'

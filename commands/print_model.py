@@ -7,5 +7,5 @@ from utils import *
 def print_model(stage, **other_args):
     model = DSRL(stage)
     tqdm.write(str(model))
-    info = "\nTotal training parameters: {0:,}\nTotal parameters: {1:,}".format(*countNoOfModelParams(model))
+    info = "\nTotal training parameters: {0:,}\nTotal parameters: {1:,}".format(*countModelParams(model))
     tqdm.write(INFO(info))

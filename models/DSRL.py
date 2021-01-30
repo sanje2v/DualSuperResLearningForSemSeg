@@ -2,12 +2,15 @@ import torch as t
 import torchvision as tv
 
 import consts
+from utils import NullSafeContextManager
 from .modules.backbone import ResNet101
 from .modules.ASPP import ASPP
 from datasets.Cityscapes import settings as cityscapes_settings
 
+from .BaseModel import BaseModel
 
-class DSRL(t.nn.Module):
+
+class DSRL(BaseModel):
     MODEL_INPUT_SIZE = (512, 1024)
     MODEL_OUTPUT_SIZE = (1024, 2048)
 
@@ -98,10 +101,10 @@ class DSRL(t.nn.Module):
                                t.nn.ReLU(inplace=True))
 
 
-    def __init__(self, stage:int):
+    def __init__(self, stage:int, profiler:t.autograd.profiler.profile=None):
         assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRL.__init__().".format(stage)
 
-        super().__init__()
+        super().__init__(profiler)
 
         # Save parameters to class instance variables
         self.stage = stage
@@ -138,30 +141,31 @@ class DSRL(t.nn.Module):
 
 
     def forward(self, x:t.Tensor):
-        # Extract features
-        backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
-        aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)
-        aspp_features = self.feature_extractor['upsample_sub'](aspp_features)           # NOTE: Output size (B, 256, 128, 256)
-        lowlevel_features = self.feature_extractor['shortcut_conv'](lowlevel_features)  # NOTE: Output size (B, 48, 128, 256)
-        cat_features = t.cat([aspp_features, lowlevel_features], dim=1)                 # NOTE: Output size (B, 304, 128, 256)
+        with NullSafeContextManager(self.profile, lambda x: x.record_function(DSRL.forward.__qualname__)):
+            # Extract features
+            backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
+            aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)
+            aspp_features = self.feature_extractor['upsample_sub'](aspp_features)           # NOTE: Output size (B, 256, 128, 256)
+            lowlevel_features = self.feature_extractor['shortcut_conv'](lowlevel_features)  # NOTE: Output size (B, 48, 128, 256)
+            cat_features = t.cat([aspp_features, lowlevel_features], dim=1)                 # NOTE: Output size (B, 304, 128, 256)
 
-        # Semantic Segmentation Super Resolution (SSSR) decoder
-        SSSR_output = self.SSSR_decoder['cat_conv'](cat_features)                       # NOTE: Output size (B, 256, 128, 256)
-        SSSR_output = self.SSSR_decoder['cls_conv'](SSSR_output)                        # NOTE: Output size (B, 20, 128, 256)
-        SSSR_output = self.SSSR_decoder['upsample16_pred'](SSSR_output)                 # NOTE: Output size (B, 20, 1024, 2048)
+            # Semantic Segmentation Super Resolution (SSSR) decoder
+            SSSR_output = self.SSSR_decoder['cat_conv'](cat_features)                       # NOTE: Output size (B, 256, 128, 256)
+            SSSR_output = self.SSSR_decoder['cls_conv'](SSSR_output)                        # NOTE: Output size (B, 20, 128, 256)
+            SSSR_output = self.SSSR_decoder['upsample16_pred'](SSSR_output)                 # NOTE: Output size (B, 20, 1024, 2048)
 
-        SISR_output = t.empty(1, requires_grad=False)
-        SSSR_transform_output = t.empty(1, requires_grad=False)
-        SISR_transform_output = t.empty(1, requires_grad=False)
-        if self.stage > 1:
-            # Single Image Super-Resolution (SISR) decoder
-            SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)
+            SISR_output = t.empty(1, requires_grad=False)
+            SSSR_transform_output = t.empty(1, requires_grad=False)
+            SISR_transform_output = t.empty(1, requires_grad=False)
+            if self.stage > 1:
+                # Single Image Super-Resolution (SISR) decoder
+                SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)
 
-            if self.stage > 2:
-                # Feature transform module for SSSR
-                SSSR_transform_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
+                if self.stage > 2:
+                    # Feature transform module for SSSR
+                    SSSR_transform_output = self.SSSR_feature_transformer(SSSR_output)   # NOTE: Output size (B, 1, 256, 128)
 
-                # Feature transform module for SISR
-                SISR_transform_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
+                    # Feature transform module for SISR
+                    SISR_transform_output = self.SISR_feature_transformer(SISR_output)   # NOTE: Output size (B, 1, 256, 128)
 
-        return SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output
+            return SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output

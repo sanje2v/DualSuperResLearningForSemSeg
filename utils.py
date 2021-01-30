@@ -47,6 +47,21 @@ class timethis:
         time_elasped = (datetime.now() - self.start_time).total_seconds()
         tqdm.write(self.message.format(makeSecondsPretty(time_elasped)))
 
+class NullSafeContextManager:
+    def __init__(self, expr_to_check, func): 
+        self.expr_to_check = expr_to_check
+        self.func = func
+        self.ctx = None
+
+    def __enter__(self):
+        if self.expr_to_check:
+            self.ctx = func(self.expr_to_check).__enter__()
+        return self.ctx
+
+    def __exit__(self, exc_type, exc_value, exc_traceback): 
+        if self.ctx:
+            self.ctx.__exit__(exc_type, exc_value, exc_traceback)
+
 
 def INFO(text):
     return termcolor.colored("INFO: {:}".format(text), 'green')
@@ -65,6 +80,11 @@ def check_version(version, major, minor):
     return version[0] >= major and version[1] >= minor
 
 
+INVALID_FILENAME_CHARS = ('<', '>', ':', '"', '/', '\\', '|', '?')
+def isInvalidFilename(filename):
+    return any([(invalid_char in filename) for invalid_char in INVALID_FILENAME_CHARS])
+
+
 def getFilesWithExtension(dir, extension_or_tuple, with_path=False):
     if not type(extension_or_tuple) is tuple:
         extension_or_tuple = (extension_or_tuple,)
@@ -73,7 +93,7 @@ def getFilesWithExtension(dir, extension_or_tuple, with_path=False):
 
 
 def prevent_system_sleep():
-    # NOTE: Only Windows OS supported for automatic system sleep disable until process ends function.
+    # NOTE: This function only supports disabling system sleep (until process ends function) on Windows OS.
     #       For other OSes, the user should be advised to do so through their system settings.
     if platform.system() == 'Windows':
         # We prevent the system from sleeping but allow the display to turn off
@@ -110,7 +130,7 @@ def convertListToNumbaList(py_list, item_type):
 def isCUDAdevice(device):
     return device.startswith(('gpu', 'cuda'))
 
-def countNoOfModelParams(model):
+def countModelParams(model):
     num_learning_parameters = num_total_parameters = 0
     for param in model.parameters():
         num_total_parameters += param.numel()

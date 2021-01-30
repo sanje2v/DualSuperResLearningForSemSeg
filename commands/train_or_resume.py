@@ -20,9 +20,9 @@ from datasets.Cityscapes import settings as cityscapes_settings
 
 
 
-def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_workers, val_interval, checkpoint_interval,
+def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_obj, num_workers, val_interval, checkpoint_interval,
                     checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum,
-                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, description, **other_args):
+                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
     # Training and Validation on dataset mode
 
     # Time keeper
@@ -38,7 +38,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
         tqdm.write(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
 
     # Create model according to stage
-    model = DSRL(stage)
+    model = DSRL(stage, profiler)
 
     if command == 'resume-train':
         model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
@@ -52,20 +52,19 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                 tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
                 model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
             else:
-                prev_weights_filename = os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
+                prev_weights_filename = os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
                 if os.path.isfile(prev_weights_filename):
                     tqdm.write(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
-                    weights_dict = load_checkpoint_or_weights(os.path.join(settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=device_obj)
+                    weights_dict = load_checkpoint_or_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=device_obj)
                     model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                 else:
                     tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
 
     # Copy the model into 'device_obj' memory
-    # NOTE: We only copy model to specific device after applying weights in CPU.
     model = model.to(device_obj)
 
     # Print number of training parameters
-    tqdm.write(INFO("Total training parameters: {:,}".format(countNoOfModelParams(model)[0])))
+    tqdm.write(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
 
     # Prepare data from CityScapes dataset
     os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
@@ -116,7 +115,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
     os.makedirs(val_logs_dir, exist_ok=True)
 
     # Write training parameters provided to params.txt log file
-    _write_params_file(os.path.join(train_logs_dir, settings.PARAMS_FILE),
+    _write_params_file(os.path.join(experiment_id, train_logs_dir, settings.PARAMS_FILE),
                        "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
                        "Device: {:s}".format(device),
                        "Disable CUDNN benchmark mode: {:}".format(disable_cudnn_benchmark) if isCUDAdevice(device) else None,
@@ -137,6 +136,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                        "Loss Weight 1: {:.4f}".format(w1) if stage > 1 else None,
                        "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
                        "Freeze batch normalization: {:}".format(freeze_batch_norm),
+                       "Experiment ID: {:}".format(experiment_id) if experiment_id else None,
                        "Description: {:s}".format(description) if description else None)
 
     # Start training and validation
@@ -212,14 +212,16 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                 Avg_val_loss = None
 
                 checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
-                save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch=epoch),
+                save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
+                                settings.CHECKPOINT_FILE.format(epoch=epoch),
                                 **checkpoint_variables_dict)
                 tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                              settings.CHECKPOINTS_DIR.format(stage=stage))))
 
                 # Delete old autosaves, if any
                 checkpoint_epoch_to_delete = epoch - checkpoint_history * checkpoint_interval
-                checkpoint_to_delete_filename = os.path.join(settings.CHECKPOINTS_DIR.format(stage=stage),
+                checkpoint_to_delete_filename = os.path.join(experiment_id,
+                                                             settings.CHECKPOINTS_DIR.format(stage=stage),
                                                              settings.CHECKPOINT_FILE.format(epoch=checkpoint_epoch_to_delete))
                 if os.path.isfile(checkpoint_to_delete_filename):
                     os.remove(checkpoint_to_delete_filename)
@@ -248,7 +250,8 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                     optimizer_state_dict = optimizer.state_dict()
 
                     checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
-                    save_checkpoint(settings.CHECKPOINTS_DIR.format(stage=stage), settings.CHECKPOINT_FILE.format(epoch='_bestval'),
+                    save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
+                                    settings.CHECKPOINT_FILE.format(epoch='_bestval'),
                                     **checkpoint_variables_dict)
 
                 # Log validation losses for this epoch to TensorBoard
@@ -259,6 +262,14 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                         val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss, epoch)
                     val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss, epoch)
 
+                # If early stopping is enabled, check if average training error is less than average
+                # validation error, and if so, stop training
+                if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
+                    msg = "Early stopping was triggered in epoch {:d}.".format(epoch)
+                    train_logger.add_text("INFO", msg)
+                    tqdm.write(INFO(msg))
+                    break
+
             # Calculate new learning rate for next epoch
             scheduler.step()
 
@@ -268,7 +279,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
             tqdm.write("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
 
         # Save training weights for this stage
-        save_weights(settings.WEIGHTS_DIR.format(stage=stage), settings.FINAL_WEIGHTS_FILE, model)
+        save_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage)), settings.FINAL_WEIGHTS_FILE, model)
 
         process_end_timestamp = datetime.now()
         process_time_taken = (process_end_timestamp - process_start_timestamp).total_seconds()

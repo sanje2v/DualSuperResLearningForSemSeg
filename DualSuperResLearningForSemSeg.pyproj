@@ -81,6 +81,9 @@
     <Compile Include="metrices\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\BaseModel.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\losses\FALoss.py">
       <SubType>Code</SubType>
     </Compile>
