@@ -8,7 +8,7 @@ def message_script_not_found(*unused):
     print(FATAL("Cannot find any matching implementation of given script name under 'scripts' directory."))
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2 or sys.argv[1].lower() in ['-h', '--help']:
+    if len(sys.argv) < 2 or sys.argv[1].casefold() in ['-h', '--help']:
         print("Run specified scripts under 'scripts' directory.")
         print("Usage: scripts.py <SCRIPT_NAME> <SCRIPT_PARAMS>")
         print("<SCRIPT_PARAMS> can be '-h' or '--help' to show arguments accepted by the script.")

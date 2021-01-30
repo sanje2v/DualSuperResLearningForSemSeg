@@ -99,7 +99,7 @@ from utils import *
 ## Training commands
 #train_parser = command_parser.add_parser('train', help='Train model for different stages')
 #train_parser.add_argument('--resume_weight', default=None, type=str, help="Resume training with given weight file")
-#train_parser.add_argument('--device', default='gpu', type=str.lower, choices=['cpu', 'gpu'], help="Device to create model in")
+#train_parser.add_argument('--device', default='gpu', type=str.casefold, choices=['cpu', 'gpu'], help="Device to create model in")
 #train_parser.add_argument('--num_workers', default=4, type=int, help="Number of workers for data loader")
 #train_parser.add_argument('--val_interval', default=10, type=int, help="Epoch intervals after which to perform validation")
 #train_parser.add_argument('--autosave_interval', default=5, type=int, help="Epoch intervals to auto save weights after in training")

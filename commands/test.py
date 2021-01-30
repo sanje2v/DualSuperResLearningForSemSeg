@@ -9,19 +9,17 @@ from PIL import Image, ImageOps
 from models import DSRL
 from models.transforms import *
 from utils import *
-import settings
 import consts
-from datasets.Cityscapes import settings as cityscapes_settings
 
 
-def test(profiler, image_file, images_dir, dataset, output_dir, weights, device, device_obj, compiled_model, **other_args):
+def test(image_file, images_dir, dataset, output_dir, weights, device, device_obj, compiled_model, **other_args):
     # Testing on a single input image using given weights
 
     if compiled_model:
         model = t.jit.load(weights)
     else:
         # Create model and set to evaluation mode
-        model = DSRL(stage=1, profiler=profiler).eval()
+        model = DSRL(stage=1, dataset_settings=dataset['settings']).eval()
 
         # Load specified weights file
         model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=True)
@@ -44,14 +42,14 @@ def test(profiler, image_file, images_dir, dataset, output_dir, weights, device,
                     .resize(swapTupleValues(DSRL.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
                 with timethis(INFO("Inference required {:}.")), t.no_grad(), t.jit.optimized_execution(should_optimize=compiled_model):
                     input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                             tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD),
+                                                             tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD),
                                                              tv.transforms.Resize(size=DSRL.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
                                                              tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
                     SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(device_obj))
 
                 input_image = np.array(input_image, dtype=np.uint8).transpose((2, 0, 1))
                 SSSR_output = np.argmax(np.squeeze(SSSR_output.detach().cpu().numpy(), axis=0), axis=0)    # Bring back result to CPU memory and convert to index array
-                vis_image = make_input_output_visualization(input_image, SSSR_output, cityscapes_settings.CLASS_RGB_COLOR)
+                vis_image = make_input_output_visualization(input_image, SSSR_output, dataset['settings'].CLASS_RGB_COLOR)
                 vis_image = vis_image.transpose((1, 2, 0))    # Channel order required for PIL.Image below
 
             with Image.fromarray(vis_image, mode='RGB') as vis_image:    # Convert from numpy array to PIL Image
@@ -65,43 +63,39 @@ def test(profiler, image_file, images_dir, dataset, output_dir, weights, device,
 
             tqdm.write(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
     else:
-        dataset_split, starting_index = dataset
-
-        joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+        joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
+                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
-        dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                         split=dataset_split,
-                                         mode='fine',
-                                         target_type='semantic',
-                                         transforms=joint_transforms)
-        loader = t.utils.data.DataLoader(dataset,
-                                         batch_size=1,
-                                         shuffle=False,
-                                         num_workers=0,
-                                         pin_memory=isCUDAdevice(device),
-                                         drop_last=False)
+        test_dataset = dataset['class'](dataset['path'],
+                                        split=dataset['split'],
+                                        transforms=joint_transforms)
+        test_loader = t.utils.data.DataLoader(test_dataset,
+                                              batch_size=1,
+                                              shuffle=False,
+                                              num_workers=0,
+                                              pin_memory=isCUDAdevice(device),
+                                              drop_last=False)
 
         with t.no_grad():
             tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
-            for i, ((input_scaled, input_org), target) in enumerate(tqdm(loader,
+            for i, ((input_scaled, input_org), target) in enumerate(tqdm(test_loader,
                                                                          desc='TESTING',
                                                                          colour='yellow',
                                                                          position=0,
                                                                          leave=False)):
-                if i >= starting_index:
+                if i >= dataset['starting_index']:
                     with timethis(INFO("Inference required {:}.")), t.no_grad():
                         SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
 
                     input_image = input_org.detach().cpu().numpy()[0]
-                    input_image = np.array(cityscapes_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
-                                  np.array(cityscapes_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+                    input_image = np.array(dataset['settings'].DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
+                                  np.array(dataset['settings'].DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                     input_image = np.clip(input_image * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                     SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and convert to index array
                     target = target.detach().cpu().numpy()[0]
-                    SSSR_output[target == cityscapes_settings.IGNORE_CLASS_LABEL] = cityscapes_settings.IGNORE_CLASS_LABEL
-                    vis_image_target = make_input_output_visualization(input_image, target, cityscapes_settings.CLASS_RGB_COLOR)
-                    vis_image_pred = make_input_output_visualization(input_image, SSSR_output, cityscapes_settings.CLASS_RGB_COLOR)
+                    SSSR_output[target == dataset['settings'].IGNORE_CLASS_LABEL] = dataset['settings'].IGNORE_CLASS_LABEL
+                    vis_image_target = make_input_output_visualization(input_image, target, dataset['settings'].CLASS_RGB_COLOR)
+                    vis_image_pred = make_input_output_visualization(input_image, SSSR_output, dataset['settings'].CLASS_RGB_COLOR)
                     vis_image = np.concatenate((vis_image_target, vis_image_pred), axis=1)
                     vis_image = vis_image.transpose((1, 2, 0))    # Channel order required for PIL.Image below
 

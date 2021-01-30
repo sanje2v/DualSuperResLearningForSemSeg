@@ -1,5 +1,7 @@
 import os
 import os.path
+import argparse
+import collections
 import platform
 import ctypes
 import termcolor
@@ -48,19 +50,52 @@ class timethis:
         tqdm.write(self.message.format(makeSecondsPretty(time_elasped)))
 
 class NullSafeContextManager:
-    def __init__(self, expr_to_check, func): 
+    def __init__(self, expr_to_check, func:callable):
         self.expr_to_check = expr_to_check
         self.func = func
         self.ctx = None
 
     def __enter__(self):
         if self.expr_to_check:
-            self.ctx = func(self.expr_to_check).__enter__()
+            self.ctx = self.func(self.expr_to_check).__enter__()
         return self.ctx
 
     def __exit__(self, exc_type, exc_value, exc_traceback): 
         if self.ctx:
             self.ctx.__exit__(exc_type, exc_value, exc_traceback)
+
+class ValidateDatasetNameAndSplit(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        datasets = self.const
+        dataset, split = values[0].casefold(), values[1].casefold()
+
+        if dataset not in datasets:
+            raise ValueError("Unknown dataset! Supported datasets are: {:s}.".format(', '.join(datasets)))
+
+        splits = datasets[dataset]['splits']
+        if split not in splits:
+            raise ValueError("Unknown dataset split! Supported splits are: {:s}.".format(', '.join(splits)))
+
+class ValidateDatasetNameSplitAndIndex(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        datasets = self.const
+        dataset, split, starting_index = values[0].casefold(), values[1].casefold(), values[2]
+
+        if dataset not in datasets:
+            raise ValueError("Unknown dataset! Supported datasets are: {:s}.".format(', '.join(datasets)))
+
+        splits = datasets[dataset]['splits']
+        if split not in splits:
+            raise ValueError("Unknown dataset split! Supported splits are: {:s}.".format(', '.join(splits)))
+
+        if not starting_index.isnumeric():
+            raise ValueError("Starting index must be an integer greater or equal to 0!")
+
+        starting_index = int(starting_index)
+        if starting_index < 0:
+            raise ValueError("Starting index must be an integer greater or equal to 0!")
+
+        setattr(namespace, self.dest, [dataset, split, starting_index])
 
 
 def INFO(text):
@@ -82,15 +117,21 @@ def check_version(version, major, minor):
 
 INVALID_FILENAME_CHARS = ('<', '>', ':', '"', '/', '\\', '|', '?')
 def isInvalidFilename(filename):
-    return any([(invalid_char in filename) for invalid_char in INVALID_FILENAME_CHARS])
+    for invalid_char in INVALID_FILENAME_CHARS:
+        if invalid_char in filename:
+            return True
+    return False
 
 
 def getFilesWithExtension(dir, extension_or_tuple, with_path=False):
     if not type(extension_or_tuple) is tuple:
         extension_or_tuple = (extension_or_tuple,)
-    extension_or_tuple = tuple(x.lower() for x in extension_or_tuple)
-    return [(os.path.join(dir, f) if with_path else f) for f in os.listdir(dir) if f.lower().endswith(extension_or_tuple)]
+    extension_or_tuple = tuple(x.casefold() for x in extension_or_tuple)
+    return [(os.path.join(dir, f) if with_path else f) for f in os.listdir(dir) if f.casefold().endswith(extension_or_tuple)]
 
+
+def hasExtension(filename, extension):
+    return os.path.splitext(filename)[-1].casefold() == extension.casefold()
 
 def prevent_system_sleep():
     # NOTE: This function only supports disabling system sleep (until process ends function) on Windows OS.
@@ -109,8 +150,15 @@ def swapTupleValues(t):
     return type(t)((t[1], t[0]))
 
 
-def hasExtension(filename, extension):
-    return os.path.splitext(filename)[-1].lower() == extension.lower()
+def convertIntIfNumeric(x):
+    return int(x) if x.isnumeric() else x
+
+
+def hasCaseInsensitive(x, items):
+    for item in items:
+        if x.casefold() == item.casefold():
+            return True
+    return False
 
 
 def convertDictToNumbaDict(py_dict, key_type, value_type):

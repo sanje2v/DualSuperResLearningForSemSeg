@@ -16,13 +16,12 @@ from metrices import *
 from utils import *
 import settings
 import consts
-from datasets.Cityscapes import settings as cityscapes_settings
 
 
 
-def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_obj, num_workers, val_interval, checkpoint_interval,
-                    checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum,
-                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
+def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_workers, dataset, val_interval, checkpoint_interval,
+                    checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum, weights_decay, poly_power,
+                    stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
     # Training and Validation on dataset mode
 
     # Time keeper
@@ -38,7 +37,7 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
         tqdm.write(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
 
     # Create model according to stage
-    model = DSRL(stage, profiler)
+    model = DSRL(stage, dataset['settings'])
 
     if command == 'resume-train':
         model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
@@ -67,25 +66,23 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
     tqdm.write(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
 
     # Prepare data from CityScapes dataset
-    os.makedirs(settings.CITYSCAPES_DATASET_DATA_DIR, exist_ok=True)
-    if os.path.getsize(settings.CITYSCAPES_DATASET_DATA_DIR) == 0:
-        raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'.".format(settings.CITYSCAPES_DATASET_DATA_DIR)))
+    os.makedirs(dataset['path'], exist_ok=True)
+    if os.path.getsize(dataset['path']) == 0:
+        raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'.".format(dataset['path'])))
 
     train_joint_transforms = JointCompose([JointRandomRotate(degrees=15.0, fill=(0, 0)),
                                            JointRandomCrop(min_scale=1.0, max_scale=3.5),
-                                           JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
+                                           JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
                                            lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4)(img), seg),
                                            JointHFlip(),
                                            # CAUTION: 'kernel_size' should be > 0 and odd integer
                                            lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
                                            lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
-                                           lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                           lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
                                            lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
-    train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                           split='train',
-                                           mode='fine',
-                                           target_type='semantic',
-                                           transforms=train_joint_transforms)
+    train_dataset = dataset['class'](dataset['path'],
+                                     split='train',
+                                     transforms=train_joint_transforms)
     train_loader = t.utils.data.DataLoader(train_dataset,
                                            batch_size=batch_size,
                                            shuffle=True,
@@ -93,14 +90,12 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
                                            pin_memory=isCUDAdevice(device),
                                            drop_last=True)
 
-    val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+    val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
+                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
-    val_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                         split='val',
-                                         mode='fine',
-                                         target_type='semantic',
-                                         transforms=val_joint_transforms)
+    val_dataset = dataset['class'](dataset['path'],
+                                   split='val',
+                                   transforms=val_joint_transforms)
     val_loader = t.utils.data.DataLoader(val_dataset,
                                          batch_size=batch_size,
                                          shuffle=False,
@@ -178,6 +173,7 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
             FA_train_avg_loss, \
             Avg_train_loss = _do_train_val(do_train=True,
                                            model=model,
+                                           dataset_settings=dataset['settings'],
                                            device_obj=device_obj,
                                            batch_size=batch_size,
                                            stage=stage,
@@ -233,6 +229,7 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
                 FA_val_avg_loss, \
                 Avg_val_loss = _do_train_val(do_train=False,
                                              model=model,
+                                             dataset_settings=dataset['settings'],
                                              device_obj=device_obj,
                                              batch_size=batch_size,
                                              stage=stage,
@@ -265,9 +262,9 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
                 # If early stopping is enabled, check if average training error is less than average
                 # validation error, and if so, stop training
                 if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
-                    msg = "Early stopping was triggered in epoch {:d}.".format(epoch)
-                    train_logger.add_text("INFO", msg)
-                    tqdm.write(INFO(msg))
+                    log_string = "Early stopping was triggered in epoch {:d}.".format(epoch)
+                    train_logger.add_text("INFO", log_string)
+                    tqdm.write(INFO(log_string))
                     break
 
             # Calculate new learning rate for next epoch
@@ -293,6 +290,7 @@ def train_or_resume(profiler, command, device, disable_cudnn_benchmark, device_o
 
 def _do_train_val(do_train,
                   model,
+                  dataset_settings,
                   device_obj,
                   batch_size,
                   stage,
@@ -356,7 +354,7 @@ def _do_train_val(do_train,
             assert not (False if SISR_transform_output is None else t.isnan(SISR_transform_output).any().item()),\
                 FATAL("SISSR feature transform network output contains 'NaN' values and so cannot continue.")
 
-            CE_loss = t.nn.CrossEntropyLoss(ignore_index=cityscapes_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
+            CE_loss = t.nn.CrossEntropyLoss(ignore_index=dataset_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
             FA_loss = (w2 * FALoss()(SSSR_transform_output, SISR_transform_output)) if stage > 2 else t.tensor(0., requires_grad=False)
             total_loss = CE_loss + MSE_loss + FA_loss
@@ -395,12 +393,12 @@ def _do_train_val(do_train,
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
                 input_org = input_org.detach().cpu().numpy()[0]
-                input_org = np.array(cityscapes_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
-                            np.array(cityscapes_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+                input_org = np.array(dataset_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
+                            np.array(dataset_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                 input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                 SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
                 logger.add_image("EXAMPLE",
-                                 make_input_output_visualization(input_org, SSSR_output, cityscapes_settings.CLASS_RGB_COLOR))
+                                 make_input_output_visualization(input_org, SSSR_output, dataset_settings.CLASS_RGB_COLOR))
 
         # Show learning rate and average losses before ending epoch
         log_string = []

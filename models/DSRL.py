@@ -5,7 +5,6 @@ import consts
 from utils import NullSafeContextManager
 from .modules.backbone import ResNet101
 from .modules.ASPP import ASPP
-from datasets.Cityscapes import settings as cityscapes_settings
 
 from .BaseModel import BaseModel
 
@@ -101,10 +100,11 @@ class DSRL(BaseModel):
                                t.nn.ReLU(inplace=True))
 
 
-    def __init__(self, stage:int, profiler:t.autograd.profiler.profile=None):
+    def __init__(self, stage, dataset_settings):
         assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRL.__init__().".format(stage)
 
-        super().__init__(profiler)
+        # CAUTION: Don't forget to call super's constructor
+        super().__init__()
 
         # Save parameters to class instance variables
         self.stage = stage
@@ -118,7 +118,7 @@ class DSRL(BaseModel):
         self.SSSR_decoder = DSRL._define_SSSR_decoder(in_channels1=256,
                                                       in_channels2=48,
                                                       mid_channels=256,
-                                                      out_channels=cityscapes_settings.DATASET_NUM_CLASSES)
+                                                      out_channels=dataset_settings.DATASET_NUM_CLASSES)
 
         if self.stage > 1:
             # Single Image Super-Resolution (SISR)
@@ -128,7 +128,7 @@ class DSRL(BaseModel):
 
             if self.stage > 2:
                 # Feature transform module for SSSR
-                self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=cityscapes_settings.DATASET_NUM_CLASSES,
+                self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=dataset_settings.DATASET_NUM_CLASSES,
                                                                                  out_channels=1)
 
                 # Feature transform module for SISR
@@ -141,7 +141,7 @@ class DSRL(BaseModel):
 
 
     def forward(self, x:t.Tensor):
-        with NullSafeContextManager(self.profile, lambda x: x.record_function(DSRL.forward.__qualname__)):
+        with t.autograd.profiler.record_function(DSRL.forward.__qualname__):
             # Extract features
             backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
             aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)

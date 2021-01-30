@@ -37,6 +37,21 @@ def main(profiler, **args):
            if 'disable_cudnn_benchmark' in args:
                t.backends.cudnn.benchmark = not args['disable_cudnn_benchmark']
 
+    # If there is dataset specified, add dataset_class, dataset_split and dataset_starting_index as required
+    if 'dataset' in args:
+        if isinstance(args['dataset'], str):
+            args['dataset'] = [args['dataset'], 'train', 0]
+
+        dataset_dict = dict(settings.DATASETS[args['dataset'][0]])  # NOTE: Create deep copy
+        for i, item in enumerate(args['dataset']):
+            if i == 0:
+                dataset_dict['name'] = item
+            elif i == 1:
+                dataset_dict['split'] = item
+            elif i == 2:
+                dataset_dict['starting_index'] = item
+        args['dataset'] = dataset_dict
+
     # According to 'args.command' call functions in 'commands' module
     if args['command'] in ['train', 'resume-train']:
         commands.train_or_resume(**args)
@@ -66,10 +81,11 @@ if __name__ == '__main__':
 
         # Training arguments
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
-        train_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        train_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         train_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         train_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         train_parser.add_argument('--num-workers', default=4, type=int, help="No. of workers for data loader")
+        train_parser.add_argument('--dataset', required=True, type=str.casefold, choices=settings.DATASETS.keys(), help="Dataset to operate on")
         train_parser.add_argument('--val-interval', default=10, type=int, help="Epoch intervals after which to perform validation")
         train_parser.add_argument('--checkpoint-interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
         train_parser.add_argument('--checkpoint-history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
@@ -98,10 +114,10 @@ if __name__ == '__main__':
         test_source = test_parser.add_mutually_exclusive_group(required=True)
         test_source.add_argument('--image-file', type=str, help="Run evaluation on a image file using trained weights")
         test_source.add_argument('--images-dir', type=str, help="Run evaluation on image files (JPG and PNG) in specified directory")
-        test_source.add_argument('--dataset', type=lambda x: int(x) if x.isnumeric() else x, nargs=2, metavar=('SPLIT', 'STARTING_INDEX'), default='test 0', help="Run evaluation on dataset split starting from specified index")
+        test_source.add_argument('--dataset', nargs=3, metavar=('DATASET', 'SPLIT', 'STARTING_INDEX'), const=settings.DATASETS, action=ValidateDatasetNameSplitAndIndex, help="Run evaluation on specified dataset and split starting from specified index")
         test_parser.add_argument('--output-dir', type=str, default=settings.OUTPUTS_DIR, help="Specify directory where testing results are saved")
-        test_parser.add_argument('--weights', type=str, required=True, help="Weights file to use")
-        test_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        test_parser.add_argument('--weights', required=True, type=str, help="Weights file to use")
+        test_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         test_parser.add_argument('--compiled-model', action='store_true', help="Using compiled model in '--weights' made using 'compile-model' command")
@@ -109,11 +125,13 @@ if __name__ == '__main__':
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
         print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
+        print_model_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne-weights', help="Removes all weights from a weights file which are not needed for inference")
         purne_weights_parser.add_argument('--src-weights', type=str, required=True, help="Checkpoint/Weights file to prune")
         purne_weights_parser.add_argument('--dest-weights', type=str, required=True, help="New weights file to write to")
+        purne_weights_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Inspect checkpoint arguments
         inspect_checkpoint_parser = command_parser.add_parser('inspect-checkpoint', help="View contents of a checkpoint file")
@@ -129,8 +147,8 @@ if __name__ == '__main__':
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
-        benchmark_parser.add_argument('--dataset-split', type=str.lower, choices=settings.DATASET_SPLITS, default='test', help="Which dataset's split to benchmark")
-        benchmark_parser.add_argument('--device', default='gpu', type=str.lower, help="Device to create model in, cpu/gpu/cuda:XX")
+        benchmark_parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
+        benchmark_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         benchmark_parser.add_argument('--num-workers', default=4, type=int, help="Number of workers for data loader")
         benchmark_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for benchmarking")
@@ -139,6 +157,7 @@ if __name__ == '__main__':
         compile_model_parser = command_parser.add_parser('compile-model', help="Compiles given model using TorchScript and outputs a compiled file")
         compile_model_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
         compile_model_parser.add_argument('--output-file', type=str, required=True, help="Output file to compile the model to")
+        compile_model_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
 
         # Validate arguments according to mode
@@ -196,7 +215,7 @@ if __name__ == '__main__':
 
             # Warning if there are already weights for this stage
             if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
-                answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).lower()
+                answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).casefold()
                 if answer == 'y':
                     shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
                     shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage))
@@ -216,12 +235,6 @@ if __name__ == '__main__':
 
             if args.images_dir and not os.path.isdir(args.images_dir):
                 raise argparse.ArgumentTypeError("Directory specified in '--images-dir' parameter doesn't exists!")
-
-            if args.dataset and not args.dataset[0] in settings.DATASET_SPLITS:
-                raise argparse.ArgumentTypeError("Dataset split must be one of {:s}!".format(", ".join(settings.DATASET_SPLITS)))
-
-            if args.dataset and not type(args.dataset[1]) is int:
-                raise argparse.ArgumentTypeError("Dataset starting index must be an integer that is equal or greater than 0!")
 
             if not any(hasExtension(args.weights, x) for x in ['.checkpoint', '.weights']):
                 raise argparse.ArgumentTypeError("'--weights' must be of either '.checkpoint' or '.weights' file type!")
@@ -243,7 +256,7 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("File specified in '--src-weights' parameter doesn't exists!")
 
             if os.path.isfile(args.dest_weights):
-                answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).lower()
+                answer = input(CAUTION("Destination weights file specified already exists. This will overwrite the file. Continue (y/n)? ")).casefold()
                 if answer != 'y':
                     sys.exit(0)
 
