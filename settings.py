@@ -43,6 +43,6 @@ DATASETS = {k.casefold(): v for k, v in DATASETS.items()}   # CAUTION: Make sure
 VARIABLES_IN_CHECKPOINT =\
 ['device', 'disable_cudnn_benchmark', 'num_workers', 'val_interval', 'checkpoint_interval', 'checkpoint_history',
  'init_weights', 'batch_size', 'epochs', 'learning_rate', 'end_learning_rate', 'momentum', 'weights_decay',
- 'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'description', 'best_validation_dict',
- 'CE_train_avg_loss', 'MSE_train_avg_loss', 'FA_train_avg_loss', 'Avg_train_loss', 'CE_val_avg_loss', 'MSE_val_avg_loss',
- 'FA_val_avg_loss', 'Avg_val_loss']
+ 'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'experiment_id', 'description', 'early_stopping',
+ 'best_validation_dict', 'CE_train_avg_loss', 'MSE_train_avg_loss', 'FA_train_avg_loss', 'Avg_train_loss',
+ 'CE_val_avg_loss', 'MSE_val_avg_loss', 'FA_val_avg_loss', 'Avg_val_loss']
