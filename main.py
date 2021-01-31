@@ -125,13 +125,13 @@ if __name__ == '__main__':
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
         print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
-        print_model_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
+        print_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne-weights', help="Removes all weights from a weights file which are not needed for inference")
         purne_weights_parser.add_argument('--src-weights', type=str, required=True, help="Checkpoint/Weights file to prune")
         purne_weights_parser.add_argument('--dest-weights', type=str, required=True, help="New weights file to write to")
-        purne_weights_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
+        purne_weights_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Inspect checkpoint arguments
         inspect_checkpoint_parser = command_parser.add_parser('inspect-checkpoint', help="View contents of a checkpoint file")
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         compile_model_parser = command_parser.add_parser('compile-model', help="Compiles given model using TorchScript and outputs a compiled file")
         compile_model_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
         compile_model_parser.add_argument('--output-file', type=str, required=True, help="Output file to compile the model to")
-        compile_model_parser.add_argument('--dataset', choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
+        compile_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
 
         # Validate arguments according to mode
