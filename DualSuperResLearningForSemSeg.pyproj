@@ -57,9 +57,6 @@
     <Compile Include="consts.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="datasets\Cityscapes\consts.py">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="datasets\Cityscapes\settings.py">
       <SubType>Code</SubType>
     </Compile>

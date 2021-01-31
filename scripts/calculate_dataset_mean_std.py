@@ -11,15 +11,17 @@ import consts
 
 def calculate_dataset_mean_std(args):
     parser = argparse.ArgumentParser(description="Calculate mean and standard deviation from the dataset's specified split.")
-    parser.add_argument('--dataset-split', default='train', choices=settings.DATASET_SPLITS)
+    parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
     args = parser.parse_args(args)
 
-    dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                     split=args.dataset_split,
-                                     mode='fine',
-                                     target_type='semantic',
-                                     transforms=lambda img, seg: (tv.transforms.ToTensor()(img), np.empty(1)))
-    data_loader = t.utils.data.DataLoader(dataset,
+    dataset_class = settings.DATASETS[args.dataset[0]]['class']
+    dataset_path = settings.DATASETS[args.dataset[0]]['path']
+    dataset_split = args.dataset[1]
+
+    test_dataset = dataset_class(dataset_path,
+                                 split=dataset_split,
+                                 transforms=lambda img, seg: (tv.transforms.ToTensor()(img), np.empty(1)))
+    test_loader = t.utils.data.DataLoader(test_dataset,
                                           batch_size=1,
                                           shuffle=False,
                                           num_workers=0,
@@ -29,7 +31,7 @@ def calculate_dataset_mean_std(args):
     # CAUTION: 'means = [[]] * consts.NUM_RGB_CHANNELS' is NOT the same as follows.
     means = [[] for _ in range(consts.NUM_RGB_CHANNELS)]
     stds = [[] for _ in range(consts.NUM_RGB_CHANNELS)]
-    for input_img, _ in tqdm(data_loader,
+    for input_img, _ in tqdm(test_loader,
                              desc='CALCULATING',
                              colour='green'):
         batch_mean_channels = t.mean(input_img, dim=(0, 2, 3))

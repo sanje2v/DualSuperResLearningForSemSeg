@@ -42,7 +42,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
                     .resize(swapTupleValues(DSRL.MODEL_OUTPUT_SIZE), resample=Image.BILINEAR) as input_image:
                 with timethis(INFO("Inference required {:}.")), t.no_grad(), t.jit.optimized_execution(should_optimize=compiled_model):
                     input_transform = tv.transforms.Compose([tv.transforms.ToTensor(),
-                                                             tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD),
+                                                             tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
                                                              tv.transforms.Resize(size=DSRL.MODEL_INPUT_SIZE, interpolation=Image.BILINEAR),
                                                              tv.transforms.Lambda(lambda x: t.unsqueeze(x, dim=0))])
                     SSSR_output, _, _, _ = model.forward(input_transform(input_image).to(device_obj))
@@ -64,7 +64,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
             tqdm.write(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
     else:
         joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
+                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
         test_dataset = dataset['class'](dataset['path'],
                                         split=dataset['split'],
@@ -88,8 +88,8 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
                         SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
 
                     input_image = input_org.detach().cpu().numpy()[0]
-                    input_image = np.array(dataset['settings'].DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
-                                  np.array(dataset['settings'].DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+                    input_image = np.array(dataset['settings'].STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
+                                  np.array(dataset['settings'].MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                     input_image = np.clip(input_image * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                     SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and convert to index array
                     target = target.detach().cpu().numpy()[0]

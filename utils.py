@@ -76,6 +76,8 @@ class ValidateDatasetNameAndSplit(argparse.Action):
         if split not in splits:
             raise ValueError("Unknown dataset split! Supported splits are: {:s}.".format(', '.join(splits)))
 
+        setattr(namespace, self.dest, values)
+
 class ValidateDatasetNameSplitAndIndex(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         datasets = self.const

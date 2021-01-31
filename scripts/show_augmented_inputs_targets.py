@@ -15,8 +15,13 @@ import consts
 
 def show_augmented_inputs_targets(args):
     parser = argparse.ArgumentParser(description="Show augmented inputs fed to model and target outputs during training.")
+    parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
     parser.add_argument('--shuffle', action='store_true')
     args = parser.parse_args(args)
+
+    dataset_class = settings.DATASETS[args.dataset[0]]['class']
+    dataset_path = settings.DATASETS[args.dataset[0]]['path']
+    dataset_split = args.dataset[1]
 
     joint_transforms = JointCompose([JointRandomRotate(degrees=15.0, fill=(0, 0)),
                                      JointRandomCrop(min_scale=1.0, max_scale=3.5),
@@ -26,14 +31,12 @@ def show_augmented_inputs_targets(args):
                                      # CAUTION: 'kernel_size' should be > 0 and odd integer
                                      lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
                                      lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
-                                     lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.DATASET_MEAN, std=cityscapes_settings.DATASET_STD)(img), seg),
+                                     lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.MEAN, std=cityscapes_settings.STD)(img), seg),
                                      lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
-    dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
-                                     split='train',
-                                     mode='fine',
-                                     target_type='semantic',
-                                     transforms=joint_transforms)
-    data_loader = t.utils.data.DataLoader(dataset,
+    test_dataset = dataset_class(dataset_path,
+                                 split=dataset_split,
+                                 transforms=joint_transforms)
+    test_loader = t.utils.data.DataLoader(test_dataset,
                                           batch_size=1,
                                           shuffle=args.shuffle,
                                           num_workers=0,
@@ -42,11 +45,11 @@ def show_augmented_inputs_targets(args):
 
     tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
     try:
-        for i, ((_, input_image), target_map) in enumerate(data_loader):
+        for i, ((_, input_image), target_map) in enumerate(test_loader):
             print("Creating visualization...")
             input_image = input_image.numpy()[0]
-            input_image = np.array(cityscapes_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
-                          np.array(cityscapes_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+            input_image = np.array(cityscapes_settings.STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
+                          np.array(cityscapes_settings.MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
             input_image = np.clip(input_image * 255., a_min=0.0, a_max=255.).astype(np.uint8)
             target_map = target_map.numpy()[0]
 

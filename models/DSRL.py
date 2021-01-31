@@ -118,7 +118,7 @@ class DSRL(BaseModel):
         self.SSSR_decoder = DSRL._define_SSSR_decoder(in_channels1=256,
                                                       in_channels2=48,
                                                       mid_channels=256,
-                                                      out_channels=dataset_settings.DATASET_NUM_CLASSES)
+                                                      out_channels=dataset_settings.NUM_CLASSES)
 
         if self.stage > 1:
             # Single Image Super-Resolution (SISR)
@@ -128,7 +128,7 @@ class DSRL(BaseModel):
 
             if self.stage > 2:
                 # Feature transform module for SSSR
-                self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=dataset_settings.DATASET_NUM_CLASSES,
+                self.SSSR_feature_transformer = DSRL._define_feature_transformer(in_channels=dataset_settings.NUM_CLASSES,
                                                                                  out_channels=1)
 
                 # Feature transform module for SISR

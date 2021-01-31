@@ -1,9 +1,9 @@
-from .consts import NUM_RGB_CHANNELS
+from consts import *
 
-DATASET_NUM_CLASSES = 19
+NUM_CLASSES = 19
 # NOTE: Computed using 'python run_script.py calculate_dataset_mean_std --dataset-split train'
-DATASET_MEAN = (0.28690, 0.32513, 0.28389)
-DATASET_STD = (0.17614, 0.18099, 0.17772)
+MEAN = (0.28690, 0.32513, 0.28389)
+STD = (0.17614, 0.18099, 0.17772)
 # Maps labels to class indices
 IGNORE_CLASS_LABEL = 255
 LABEL_MAPPING_DICT =\
@@ -26,5 +26,5 @@ CLASS_RGB_COLOR =\
     10: (70, 130, 180), 11: (220, 20, 60), 12: (255, 0, 0), 13: (0, 0, 142), 14: (0, 0, 70), 15: (0, 60, 100),\
     16: (0, 80, 100), 17: (0, 0, 230), 18: (119, 11, 32), IGNORE_CLASS_LABEL: (0, 0, 0)
 }
-assert len(CLASS_RGB_COLOR.items()) == DATASET_NUM_CLASSES + 1 and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR.values()]),\
-    "'CLASS_RGB_COLOR' needs {:d} color values with three RGB color values!".format(DATASET_NUM_CLASSES)
+assert len(CLASS_RGB_COLOR.items()) == NUM_CLASSES + 1 and all([len(x) == NUM_RGB_CHANNELS for x in CLASS_RGB_COLOR.values()]),\
+    "'CLASS_RGB_COLOR' needs {:d} color values with three RGB color values!".format(NUM_CLASSES)

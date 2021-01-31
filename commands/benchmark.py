@@ -33,7 +33,7 @@ def benchmark(weights, dataset, device, device_obj, num_workers, batch_size, **o
         raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'. Please refer to 'README.md'.".format(dataset['path'])))
 
     test_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                          lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
+                                          lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
                                           lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
     test_dataset = dataset['class'](dataset['path'],
                                     split=dataset['split'],
@@ -53,7 +53,7 @@ def benchmark(weights, dataset, device, device_obj, num_workers, batch_size, **o
                            bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         # Run benchmark
         CE_avg_loss = AverageMeter('CE Avg. Loss')
-        miou = mIoU(num_classes=dataset['settings'].DATASET_NUM_CLASSES)
+        miou = mIoU(num_classes=dataset['settings'].NUM_CLASSES)
         accuracy_mean = Accuracy()
         for ((input_scaled, _), target) in test_loader:
             SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))

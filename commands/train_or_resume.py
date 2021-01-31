@@ -19,7 +19,7 @@ import consts
 
 
 
-def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_workers, dataset, val_interval, checkpoint_interval,
+def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_workers, dataset, val_interval, checkpoint_interval,
                     checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum, weights_decay, poly_power,
                     stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
     # Training and Validation on dataset mode
@@ -78,7 +78,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                            # CAUTION: 'kernel_size' should be > 0 and odd integer
                                            lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
                                            lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
-                                           lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
+                                           lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
                                            lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
     train_dataset = dataset['class'](dataset['path'],
                                      split='train',
@@ -91,7 +91,7 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                                            drop_last=True)
 
     val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].DATASET_MEAN, std=dataset['settings'].DATASET_STD)(img), seg),
+                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
     val_dataset = dataset['class'](dataset['path'],
                                    split='val',
@@ -115,6 +115,8 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                        "Device: {:s}".format(device),
                        "Disable CUDNN benchmark mode: {:}".format(disable_cudnn_benchmark) if isCUDAdevice(device) else None,
                        "No. of workers: {:d}".format(num_workers),
+                       "Dataset: {:s}".format(dataset['name']),
+                       "Dataset path: {:s}".format(dataset['path']),
                        "Validation interval: {:d}".format(val_interval),
                        "Checkpoint interval: {:d}".format(checkpoint_interval),
                        "Checkpoint history: {:d}".format(checkpoint_history),
@@ -132,7 +134,8 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
                        "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
                        "Freeze batch normalization: {:}".format(freeze_batch_norm),
                        "Experiment ID: {:}".format(experiment_id) if experiment_id else None,
-                       "Description: {:s}".format(description) if description else None)
+                       "Description: {:s}".format(description) if description else None,
+                       "Early stopping: {:}".format(early_stopping))
 
     # Start training and validation
     with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger,\
@@ -168,9 +171,9 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
 
             # Do training for this epoch
             training_epoch_begin_timestamp = datetime.now()
-            CE_train_avg_loss, \
-            MSE_train_avg_loss, \
-            FA_train_avg_loss, \
+            CE_train_avg_loss,\
+            MSE_train_avg_loss,\
+            FA_train_avg_loss,\
             Avg_train_loss = _do_train_val(do_train=True,
                                            model=model,
                                            dataset_settings=dataset['settings'],
@@ -224,9 +227,9 @@ def train_or_resume(command, device, disable_cudnn_benchmark, device_obj, num_wo
 
             if epoch % val_interval == 0:
                 # Do validation at epoch intervals of 'val_interval'
-                CE_val_avg_loss, \
-                MSE_val_avg_loss, \
-                FA_val_avg_loss, \
+                CE_val_avg_loss,\
+                MSE_val_avg_loss,\
+                FA_val_avg_loss,\
                 Avg_val_loss = _do_train_val(do_train=False,
                                              model=model,
                                              dataset_settings=dataset['settings'],
@@ -393,8 +396,8 @@ def _do_train_val(do_train,
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
                 input_org = input_org.detach().cpu().numpy()[0]
-                input_org = np.array(dataset_settings.DATASET_STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
-                            np.array(dataset_settings.DATASET_MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+                input_org = np.array(dataset_settings.STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
+                            np.array(dataset_settings.MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                 input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                 SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
                 logger.add_image("EXAMPLE",
