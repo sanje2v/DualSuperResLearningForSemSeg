@@ -37,7 +37,7 @@ def main(profiler, **args):
            if 'disable_cudnn_benchmark' in args:
                t.backends.cudnn.benchmark = not args['disable_cudnn_benchmark']
 
-    # If there is dataset specified, add dataset_class, dataset_split and dataset_starting_index as required
+    # If there is 'dataset' key specified, add dataset's class, name, split and starting index
     if 'dataset' in args:
         if isinstance(args['dataset'], str):
             args['dataset'] = [args['dataset'], 'train', 0]

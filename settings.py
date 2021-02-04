@@ -9,6 +9,8 @@ from datasets import Cityscapes
 
 DEFAULT_DTYPE = t.float32
 t.set_default_dtype(DEFAULT_DTYPE)
+# NOTE: Put all batch normalization class types here so that 'freeze batch normalization layer' can work properly
+BATCHNORM_MODULE_CLASSES = (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm)
 
 version_tuple = collections.namedtuple("Row", ["major", "minor"])
 MIN_PYTHON_VERSION = version_tuple(major=3, minor=7)
