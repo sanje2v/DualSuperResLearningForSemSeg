@@ -61,7 +61,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
                 if image_file:
                     vis_image.show(title='Segmentation output')
 
-            tqdm.write(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
+            print(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
     else:
         joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
                                          lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
@@ -77,7 +77,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
                                               drop_last=False)
 
         with t.no_grad():
-            tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
+            print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
             for i, ((input_scaled, input_org), target) in enumerate(tqdm(test_loader,
                                                                          desc='TESTING',
                                                                          colour='yellow',
@@ -105,6 +105,6 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, device_ob
                         vis_image_filename = os.path.join(output_dir, str(i) + '.png')
                         vis_image.save(vis_image_filename, format='PNG')
                         vis_image.show(title='Segmentation output')
-                    tqdm.write(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
+                    print(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
 
                     input()

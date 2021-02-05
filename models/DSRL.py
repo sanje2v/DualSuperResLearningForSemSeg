@@ -2,7 +2,6 @@ import torch as t
 import torchvision as tv
 
 import consts
-from utils import NullSafeContextManager
 from .modules.backbone import ResNet101
 from .modules.ASPP import ASPP
 
@@ -10,6 +9,7 @@ from .BaseModel import BaseModel
 
 
 class DSRL(BaseModel):
+    STAGES = [1, 2, 3]
     MODEL_INPUT_SIZE = (512, 1024)
     MODEL_OUTPUT_SIZE = (1024, 2048)
 
@@ -154,9 +154,9 @@ class DSRL(BaseModel):
             SSSR_output = self.SSSR_decoder['cls_conv'](SSSR_output)                        # NOTE: Output size (B, 20, 128, 256)
             SSSR_output = self.SSSR_decoder['upsample16_pred'](SSSR_output)                 # NOTE: Output size (B, 20, 1024, 2048)
 
-            SISR_output = t.empty(1, requires_grad=False)
-            SSSR_transform_output = t.empty(1, requires_grad=False)
-            SISR_transform_output = t.empty(1, requires_grad=False)
+            SISR_output = t.zeros(1, requires_grad=False)
+            SSSR_transform_output = t.zeros(1, requires_grad=False)
+            SISR_transform_output = t.zeros(1, requires_grad=False)
             if self.stage > 1:
                 # Single Image Super-Resolution (SISR) decoder
                 SISR_output = self.SISR_decoder(cat_features)                           # NOTE: Output size (B, 3, 1024, 2048)

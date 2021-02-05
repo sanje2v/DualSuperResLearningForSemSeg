@@ -8,6 +8,7 @@ import numpy as np
 import torch as t
 import torchvision as tv
 
+from models import DSRL
 import commands
 from utils import *
 import settings
@@ -54,6 +55,7 @@ def main(profiler, **args):
 
     # According to 'args.command' call functions in 'commands' module
     if args['command'] in ['train', 'resume-train']:
+        args['is_resuming_train'] = (args['command'] == 'resume-train')
         commands.train_or_resume(**args)
     else:
         # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
@@ -73,6 +75,9 @@ if __name__ == '__main__':
         FATAL("This program needs at least TorchVision {0:d}.{1:d}.".format(*settings.MIN_TORCHVISION_VERSION))
     assert check_version(np.__version__, *settings.MIN_NUMPY_VERSION), \
         FATAL("This program needs at least NumPy {0:d}.{1:d}.".format(*settings.MIN_NUMPY_VERSION))
+
+    # All calls to 'print()' is to be redirected to 'tqdm.write()'
+    overrideDefaultPrintWithTQDM()
 
     profiler = None
     try:
@@ -97,7 +102,7 @@ if __name__ == '__main__':
         train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
         train_parser.add_argument('--weights-decay', type=float, default=0.0005, help="Weights decay for SGD")
         train_parser.add_argument('--poly-power', type=float, default=0.9, help="Power for poly learning rate strategy")
-        train_parser.add_argument('--stage', type=int, choices=settings.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
+        train_parser.add_argument('--stage', type=int, choices=DSRL.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
         train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
@@ -124,7 +129,7 @@ if __name__ == '__main__':
 
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
-        print_model_parser.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage to print layers of model for")
+        print_model_parser.add_argument('--stage', type=int, choices=DSRL.STAGES, help="Stage to print layers of model for")
         print_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Purne weights arguments
@@ -310,10 +315,10 @@ if __name__ == '__main__':
 
 
     except KeyboardInterrupt:
-        tqdm.write(CAUTION("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
+        print(CAUTION("Caught 'Ctrl+c' SIGINT signal. Aborted operation."))
 
     except argparse.ArgumentTypeError as ex:
-        tqdm.write(FATAL("{:s}\n".format(str(ex))))
+        print(FATAL("{:s}\n".format(str(ex))))
         parser.print_usage()
 
     finally:
@@ -321,4 +326,4 @@ if __name__ == '__main__':
         if profiler:
             profiling_filename = os.path.join(settings.OUTPUTS_DIR, settings.PROFILING_FILE)
             profiler.export_chrome_trace(profiling_filename)
-            tqdm.write(INFO("Profiling output has been saved to '{:s}'.".format(profiling_filename)))
+            print(INFO("Profiling output has been saved to '{:s}'.".format(profiling_filename)))

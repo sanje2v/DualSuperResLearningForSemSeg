@@ -43,6 +43,6 @@ def calculate_dataset_mean_std(args):
 
     means = tuple(np.mean(means[channel]) for channel in range(consts.NUM_RGB_CHANNELS))
     stds = tuple(np.mean(stds[channel]) for channel in range(consts.NUM_RGB_CHANNELS))
-    tqdm.write("\n---- RESULTS ---")
-    tqdm.write("Avg. mean: ({0:.5f}, {1:.5f}, {2:.5f})".format(*means))
-    tqdm.write("Avg. standard deviation: ({0:.5f}, {1:.5f}, {2:.5f})".format(*stds))
+    print("\n---- RESULTS ---")
+    print("Avg. mean: ({0:.5f}, {1:.5f}, {2:.5f})".format(*means))
+    print("Avg. standard deviation: ({0:.5f}, {1:.5f}, {2:.5f})".format(*stds))

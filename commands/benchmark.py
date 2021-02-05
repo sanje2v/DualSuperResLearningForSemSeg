@@ -79,10 +79,10 @@ def benchmark(weights, dataset, device, device_obj, num_workers, batch_size, **o
 
     total_miou = miou() * 100.0
     total_mean_accuracy = accuracy_mean() * 100.0
-    tqdm.write("-------- RESULTS --------")
-    tqdm.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
-    tqdm.write("mIoU %: {:.2f}".format(total_miou))
-    tqdm.write("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
+    print("-------- RESULTS --------")
+    print("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
+    print("mIoU %: {:.2f}".format(total_miou))
+    print("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
 
     # Save benchmark result to output directories in 'benchmark.txt'
     os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)

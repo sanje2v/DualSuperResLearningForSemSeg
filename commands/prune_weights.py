@@ -14,4 +14,4 @@ def prune_weights(src_weights, dest_weights, dataset, **other_args):
         model.load_state_dict(load_checkpoint_or_weights(src_weights)['model_state_dict'], strict=True)
 
         save_weights(*os.path.split(dest_weights), model)
-        tqdm.write(INFO("Output weight saved in '{:s}'.".format(dest_weights)))
+        print(INFO("Output weight saved in '{:s}'.".format(dest_weights)))

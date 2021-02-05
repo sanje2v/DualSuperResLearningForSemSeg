@@ -43,7 +43,7 @@ def show_augmented_inputs_targets(args):
                                           pin_memory=False,
                                           drop_last=False)
 
-    tqdm.write(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
+    print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
     try:
         for i, ((_, input_image), target_map) in enumerate(test_loader):
             print("Creating visualization...")

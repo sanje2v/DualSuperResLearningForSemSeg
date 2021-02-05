@@ -7,6 +7,8 @@
 
 from utils import *
 
+overrideDefaultPrintWithTQDM()
+
 #from progress.bar import Bar as ProgressBar
 #import time
 
@@ -48,8 +50,8 @@ from utils import *
 #            for j in tqdm(range(0, 50), desc="VALIDATION", colour='yellow', position=1, leave=False, bar_format=bar_format):
 #                time.sleep(.1)
 
-#            tqdm.write('')
-#            tqdm.write('')
+#            print('')
+#            print('')
 
 #        p1.write("Epoch: %d" % i)
 

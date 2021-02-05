@@ -19,7 +19,7 @@ import consts
 
 
 
-def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_workers, dataset, val_interval, checkpoint_interval,
+def train_or_resume(is_resuming_train, device, device_obj, disable_cudnn_benchmark, num_workers, dataset, val_interval, checkpoint_interval,
                     checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum, weights_decay, poly_power,
                     stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
     # Training and Validation on dataset mode
@@ -27,19 +27,19 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
     # Time keeper
     process_start_timestamp = datetime.now()
 
-    if command == 'train':
+    if not is_resuming_train:
         best_validation_dict = {}
 
     # Prevent system from entering sleep state so that long training session is not interrupted
     if prevent_system_sleep():
-        tqdm.write(INFO("System will NOT be allowed to sleep until this training is complete/interrupted."))
+        print(INFO("System will NOT be allowed to sleep until this training is complete/interrupted."))
     else:
-        tqdm.write(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
+        print(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
 
     # Create model according to stage
     model = DSRL(stage, dataset['settings'])
 
-    if command == 'resume-train':
+    if is_resuming_train:
         model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
     else:
         # Load initial weight, if any
@@ -48,22 +48,22 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
         else:
             # Load checkpoint from previous stage, if not the first stage
             if stage == 1:
-                tqdm.write(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
+                print(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
                 model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
             else:
                 prev_weights_filename = os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
                 if os.path.isfile(prev_weights_filename):
-                    tqdm.write(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
+                    print(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
                     weights_dict = load_checkpoint_or_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=device_obj)
                     model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                 else:
-                    tqdm.write(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
+                    print(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
 
     # Copy the model into 'device_obj' memory
     model = model.to(device_obj)
 
     # Print number of training parameters
-    tqdm.write(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
+    print(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
 
     # Prepare data from CityScapes dataset
     os.makedirs(dataset['path'], exist_ok=True)
@@ -121,7 +121,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
                        "Checkpoint interval: {:d}".format(checkpoint_interval),
                        "Checkpoint history: {:d}".format(checkpoint_history),
                        "Initial weights: {:s}".format(init_weights) if init_weights else None,
-                       "Resuming checkpoint: {:s}".format(other_args['checkpoint']) if command =='resume-train' else None,
+                       "Resuming checkpoint: {:s}".format(other_args['checkpoint']) if is_resuming_train else None,
                        "Batch size: {:d}".format(batch_size),
                        "Epochs: {:d}".format(epochs),
                        "Learning rate: {:f}".format(learning_rate),
@@ -146,7 +146,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
                                 lr=learning_rate,
                                 momentum=momentum,
                                 weight_decay=weights_decay)
-        if command == 'resume-train':
+        if is_resuming_train:
             optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
             starting_epoch = checkpoint_dict['epoch']
         else:
@@ -161,13 +161,13 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
         # Start training and then validation after specific intervals
         train_logger.add_text("INFO", "Training started on {:s}.".format(process_start_timestamp.strftime("%c")), 1)
         log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
-        tqdm.write('\n' + INFO(log_string))
+        print('\n' + INFO(log_string))
 
         gc.collect()    # Let's free as much unreferenced variables memory as possible before starting training
         training_epoch_timetaken_list = []
         for epoch in range((starting_epoch + 1), (epochs + 1)):
             log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
-            tqdm.write(log_string)
+            print(log_string)
 
             # Do training for this epoch
             training_epoch_begin_timestamp = datetime.now()
@@ -214,7 +214,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
                 save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
                                 settings.CHECKPOINT_FILE.format(epoch=epoch),
                                 **checkpoint_variables_dict)
-                tqdm.write(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
+                print(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
                                                                                              settings.CHECKPOINTS_DIR.format(stage=stage))))
 
                 # Delete old autosaves, if any
@@ -267,7 +267,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
                 if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
                     log_string = "Early stopping was triggered in epoch {:d}.".format(epoch)
                     train_logger.add_text("INFO", log_string)
-                    tqdm.write(INFO(log_string))
+                    print(INFO(log_string))
                     break
 
             # Calculate new learning rate for next epoch
@@ -276,7 +276,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
             # Print estimated time for training completion
             training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds())
             training_epoch_avg_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
-            tqdm.write("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
+            print("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
 
         # Save training weights for this stage
         save_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage)), settings.FINAL_WEIGHTS_FILE, model)
@@ -288,7 +288,7 @@ def train_or_resume(command, device, device_obj, disable_cudnn_benchmark, num_wo
                                                                                    process_end_timestamp.strftime("%c")),
                               epochs)
         log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
-        tqdm.write('\n' + INFO(log_string))
+        print('\n' + INFO(log_string))
 
 
 def _do_train_val(do_train,
@@ -348,14 +348,14 @@ def _do_train_val(do_train,
 
             SSSR_output, SISR_output, SSSR_transform_output, SISR_transform_output = model(input_scaled)
             # SANITY CHECK: Check network outputs doesn't have any 'NaN' values
-            assert not (t.isnan(SSSR_output).any().item()),\
+            assert not t.isnan(SSSR_output).any().item(),\
                 FATAL("SSSR network output contains 'NaN' values and so cannot continue.")
-            assert not (False if SISR_output is None else t.isnan(SISR_output).any().item()),\
-                FATAL("SISSR network output contains 'NaN' values and so cannot continue.")
-            assert not (False if SSSR_transform_output is None else t.isnan(SSSR_transform_output).any().item()),\
-                FATAL("SISSR feature transform network output contains 'NaN' values and so cannot continue.")
-            assert not (False if SISR_transform_output is None else t.isnan(SISR_transform_output).any().item()),\
-                FATAL("SISSR feature transform network output contains 'NaN' values and so cannot continue.")
+            assert not t.isnan(SISR_output).any().item(),\
+                FATAL("SISR network output contains 'NaN' values and so cannot continue.")
+            assert not t.isnan(SSSR_transform_output).any().item(),\
+                FATAL("SSSR feature transform network output contains 'NaN' values and so cannot continue.")
+            assert not t.isnan(SISR_transform_output).any().item(),\
+                FATAL("SISR feature transform network output contains 'NaN' values and so cannot continue.")
 
             CE_loss = t.nn.CrossEntropyLoss(ignore_index=dataset_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
@@ -413,7 +413,7 @@ def _do_train_val(do_train,
                 log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
             log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
         log_string = ', '.join(log_string)
-        tqdm.write(log_string)
+        print(log_string)
 
     return CE_avg_loss.avg, MSE_avg_loss.avg, FA_avg_loss.avg, Avg_loss.avg
 

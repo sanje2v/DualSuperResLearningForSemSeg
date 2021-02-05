@@ -1,6 +1,7 @@
 import os
 import os.path
 import argparse
+import inspect
 import collections
 import platform
 import ctypes
@@ -21,7 +22,7 @@ def timeit(message=None, label='default'):
     now = datetime.now()
     if label in _starttimes_dict and message:
         difftime = now - _starttimes_dict[label]
-        tqdm.write("{0:s}: {1:.3f} secs".format(label, difftime.total_seconds()))
+        print("{0:s}: {1:.3f} secs".format(label, difftime.total_seconds()))
     _starttimes_dict[label] = now
     return difftime
 
@@ -47,22 +48,18 @@ class timethis:
 
     def __exit__(self, type, value, traceback):
         time_elasped = (datetime.now() - self.start_time).total_seconds()
-        tqdm.write(self.message.format(makeSecondsPretty(time_elasped)))
+        print(self.message.format(makeSecondsPretty(time_elasped)))
 
-class NullSafeContextManager:
-    def __init__(self, expr_to_check, func:callable):
-        self.expr_to_check = expr_to_check
-        self.func = func
-        self.ctx = None
-
-    def __enter__(self):
-        if self.expr_to_check:
-            self.ctx = self.func(self.expr_to_check).__enter__()
-        return self.ctx
-
-    def __exit__(self, exc_type, exc_value, exc_traceback): 
-        if self.ctx:
-            self.ctx.__exit__(exc_type, exc_value, exc_traceback)
+# Ref: https://stackoverflow.com/questions/36986929/redirect-print-command-in-python-script-through-tqdm-write
+def overrideDefaultPrintWithTQDM():
+    old_print = inspect.builtins.print
+    def new_print(*args, **kwargs):
+        # if tqdm.write raises error, use builtin print
+        try:
+            tqdm.write(*args, **kwargs)
+        except:
+            old_print(*args, ** kwargs)
+    inspect.builtins.print = new_print
 
 class ValidateDatasetNameAndSplit(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):

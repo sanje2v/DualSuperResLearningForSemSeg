@@ -21,4 +21,4 @@ def inspect_checkpoint(checkpoint, **other_args):
 
         return "{{{:s}}}".format(', '.join(output))
 
-    tqdm.write(prettyDictToStr(checkpoint_dict))
+    print(prettyDictToStr(checkpoint_dict))
