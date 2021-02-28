@@ -11,7 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>DualSuperResLearningForSemSeg</Name>
     <RootNamespace>DualSuperResLearningForSemSeg</RootNamespace>
-    <InterpreterId>CondaEnv|CondaEnv|env</InterpreterId>
+    <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <CommandLineArguments>test --dataset cityscapes train 0 --weights "C:\Users\Sanjeev\Desktop\Downloaded\stage1\weights\epoch_bestval.checkpoint"</CommandLineArguments>
@@ -157,9 +157,6 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <InterpreterReference Include="CondaEnv|CondaEnv|env" />
-  </ItemGroup>
-  <ItemGroup>
     <Folder Include="datasets\" />
     <Folder Include="datasets\Cityscapes\" />
     <Folder Include="demo\" />
@@ -179,6 +176,17 @@
     <Content Include="demo\stage1_output.png" />
     <Content Include="README.md" />
     <Content Include="weights\.placeholder" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include="env\">
+      <Id>env</Id>
+      <Version>3.7</Version>
+      <Description>env</Description>
+      <InterpreterPath>python.exe</InterpreterPath>
+      <WindowsInterpreterPath>pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

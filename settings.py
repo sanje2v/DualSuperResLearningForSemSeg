@@ -12,11 +12,27 @@ t.set_default_dtype(DEFAULT_DTYPE)
 # NOTE: Put all batch normalization class types here so that 'freeze batch normalization layer' can work properly
 BATCHNORM_MODULE_CLASSES = (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm)
 
+# Minimum required library versions
 version_tuple = collections.namedtuple("Row", ["major", "minor"])
 MIN_PYTHON_VERSION = version_tuple(major=3, minor=7)
 MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
 MIN_TORCHVISION_VERSION = version_tuple(major=0, minor=8)
 MIN_NUMPY_VERSION = version_tuple(major=1, minor=19)
+
+# Default values for commandline arguments
+DEFAULT_DEVICE = 'gpu'
+DEFAULT_NUM_WORKERS = 4
+DEFAULT_VAL_INTERVAL = 10
+DEFAULT_CHECKPOINT_INTERVAL = 5
+DEFAULT_CHECKPOINT_HISTORY = 5
+DEFAULT_BATCH_SIZE = 4
+DEFAULT_LEARNING_RATE = 0.01
+DEFAULT_END_LEARNING_RATE = 0.001
+DEFAULT_MOMENTUM = 0.9
+DEFAULT_WEIGHTS_DECAY = 0.0005
+DEFAULT_POLY_POWER = 0.9
+DEFAULT_LOSS_WEIGHTS = [0.1, 1.0]
+
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 PARAMS_FILE = 'params.txt'

@@ -16,9 +16,6 @@ import settings
 
 
 def main(profiler, **args):
-    # Make 'profiler' available to modules so that they can label their code for profiling
-    args['profiler'] = profiler
-
     # Load variables from checkpoint if resuming training
     if args['command'] == 'resume-train':
         checkpoint_dict = load_checkpoint_or_weights(args['checkpoint'])
@@ -86,25 +83,25 @@ if __name__ == '__main__':
 
         # Training arguments
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
-        train_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        train_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         train_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         train_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
-        train_parser.add_argument('--num-workers', default=4, type=int, help="No. of workers for data loader")
+        train_parser.add_argument('--num-workers', default=settings.DEFAULT_NUM_WORKERS, type=int, help="No. of workers for data loader")
         train_parser.add_argument('--dataset', required=True, type=str.casefold, choices=settings.DATASETS.keys(), help="Dataset to operate on")
-        train_parser.add_argument('--val-interval', default=10, type=int, help="Epoch intervals after which to perform validation")
-        train_parser.add_argument('--checkpoint-interval', default=5, type=int, help="Epoch intervals to create checkpoint after in training")
-        train_parser.add_argument('--checkpoint-history', default=5, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
+        train_parser.add_argument('--val-interval', default=settings.DEFAULT_VAL_INTERVAL, type=int, help="Epoch intervals after which to perform validation")
+        train_parser.add_argument('--checkpoint-interval', default=settings.DEFAULT_CHECKPOINT_INTERVAL, type=int, help="Epoch intervals to create checkpoint after in training")
+        train_parser.add_argument('--checkpoint-history', default=settings.DEFAULT_CHECKPOINT_HISTORY, type=int, help="No. of latest autosaved checkpoints to keep while deleting old ones, 0 to disable autosave")
         train_parser.add_argument('--init-weights', default=None, type=str, help="Load initial weights file for model")
-        train_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for training and testing")
+        train_parser.add_argument('--batch-size', default=settings.DEFAULT_BATCH_SIZE, type=int, help="Batch size to use for training and testing")
         train_parser.add_argument('--epochs', required=True, type=int, help="No. of epochs to train")
-        train_parser.add_argument('--learning-rate', type=float, default=0.01, help="Learning rate to begin training with")
-        train_parser.add_argument('--end-learning-rate', type=float, default=0.001, help="End learning rate for the last epoch")
-        train_parser.add_argument('--momentum', type=float, default=0.9, help="Momentum value for SGD")
-        train_parser.add_argument('--weights-decay', type=float, default=0.0005, help="Weights decay for SGD")
-        train_parser.add_argument('--poly-power', type=float, default=0.9, help="Power for poly learning rate strategy")
+        train_parser.add_argument('--learning-rate', type=float, default=settings.DEFAULT_LEARNING_RATE, help="Learning rate to begin training with")
+        train_parser.add_argument('--end-learning-rate', type=float, default=settings.DEFAULT_END_LEARNING_RATE, help="End learning rate for the last epoch")
+        train_parser.add_argument('--momentum', type=float, default=settings.DEFAULT_MOMENTUM, help="Momentum value for SGD")
+        train_parser.add_argument('--weights-decay', type=float, default=settings.DEFAULT_WEIGHTS_DECAY, help="Weights decay for SGD")
+        train_parser.add_argument('--poly-power', type=float, default=settings.DEFAULT_POLY_POWER, help="Power for poly learning rate strategy")
         train_parser.add_argument('--stage', type=int, choices=DSRL.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
-        train_parser.add_argument('--w1', type=float, default=0.1, help="Weight for MSE loss")
-        train_parser.add_argument('--w2', type=float, default=1.0, help="Weight for FA loss")
+        train_parser.add_argument('--w1', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[0], help="Weight for MSE loss")
+        train_parser.add_argument('--w2', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[1], help="Weight for FA loss")
         train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
         train_parser.add_argument('--experiment_id', type=str, default='', help="Experiment ID which is used to create a root directory for weights and logs directories")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
@@ -122,7 +119,7 @@ if __name__ == '__main__':
         test_source.add_argument('--dataset', nargs=3, metavar=('DATASET', 'SPLIT', 'STARTING_INDEX'), const=settings.DATASETS, action=ValidateDatasetNameSplitAndIndex, help="Dataset, split and starting index to test from")
         test_parser.add_argument('--output-dir', type=str, default=settings.OUTPUTS_DIR, help="Specify directory where testing results are saved")
         test_parser.add_argument('--weights', required=True, type=str, help="Weights file to use")
-        test_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        test_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         test_parser.add_argument('--compiled-model', action='store_true', help="Using compiled model in '--weights' made using 'compile-model' command")
@@ -153,10 +150,10 @@ if __name__ == '__main__':
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
         benchmark_parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
-        benchmark_parser.add_argument('--device', default='gpu', type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        benchmark_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
-        benchmark_parser.add_argument('--num-workers', default=4, type=int, help="Number of workers for data loader")
-        benchmark_parser.add_argument('--batch-size', default=6, type=int, help="Batch size to use for benchmarking")
+        benchmark_parser.add_argument('--num-workers', default=settings.DEFAULT_NUM_WORKERS, type=int, help="Number of workers for data loader")
+        benchmark_parser.add_argument('--batch-size', default=settings.DEFAULT_BATCH_SIZE, type=int, help="Batch size to use for benchmarking")
 
         # Compile model arguments
         compile_model_parser = command_parser.add_parser('compile-model', help="Compiles given model using TorchScript and outputs a compiled file")
