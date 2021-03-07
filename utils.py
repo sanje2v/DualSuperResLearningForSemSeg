@@ -1,5 +1,6 @@
 import os
 import os.path
+import apex
 import argparse
 import inspect
 import collections
@@ -61,6 +62,18 @@ def overrideDefaultPrintWithTQDM():
             old_print(*args, ** kwargs)
     inspect.builtins.print = new_print
 
+class ConditionalContextManager:
+    def __init__(self, expr_to_check, func_true, func_false=lambda: None):
+        assert all(callable(f) for f in [func_true, func_false]), "BUG CHECK: Both 'func_true' and 'func_false' arguments must be 'Callable' type!"
+        self.ctx = func_true() if expr_to_check else func_false()
+
+    def __enter__(self):
+        return self.ctx.__enter__() if hasattr(self.ctx, '__enter__') else self.ctx
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if hasattr(self.ctx, '__exit__'):
+            self.ctx.__exit__(exc_type, exc_value, exc_traceback)
+
 class ValidateDatasetNameAndSplit(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         datasets = self.const
@@ -95,6 +108,52 @@ class ValidateDatasetNameSplitAndIndex(argparse.Action):
             raise ValueError("Starting index must be an integer greater or equal to 0!")
 
         setattr(namespace, self.dest, [dataset, split, starting_index])
+
+class ValidateDistributedTrainingOptions(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        backends = self.const
+        master_addr,\
+        master_port,\
+        nodes,\
+        devices_per_node,\
+        backend,\
+        init_method,\
+        node_id = values[0], values[1], values[2], values[3], values[4].casefold(), values[5].casefold(), values[6]
+
+        if not master_port.isnumeric():
+            raise ValueError("Master port must be a positive integer!")
+
+        master_port = int(master_port)
+
+        if not nodes.isnumeric():
+            raise ValueError("Nodes must be a positive integer!")
+
+        nodes = int(nodes)
+        if nodes < 1:
+            raise ValueError("Nodes must be greater than 0!")
+
+        if not devices_per_node.isnumeric():
+            raise ValueError("GPUs per node must be a positive integer!")
+
+        devices_per_node = int(devices_per_node)
+        if devices_per_node < 1:
+            raise ValueError("GPUs per node must be greater than 0!")
+
+        if backend not in backends:
+            raise ValueError("Supported backends must be one of: [{:s}]!".format(', '.join(backends)))
+
+        if not getattr(t.distributed, "is_{:s}_available".format(backend), lambda: False)():
+            raise ValueError("Backend '{:s}' is not properly configured!".format(backend))
+
+        if init_method == ' ':
+            init_method = None
+
+        if not node_id.isnumeric():
+            raise ValueError("Node id must be an integer greater or equal to 0!")
+
+        node_id = int(node_id)
+
+        setattr(namespace, self.dest, [master_addr, master_port, nodes, devices_per_node, backend, init_method, node_id])
 
 
 def INFO(text):
@@ -175,7 +234,7 @@ def convertListToNumbaList(py_list, item_type):
     return nb_list
 
 def isCUDAdevice(device):
-    return device.startswith(('gpu', 'cuda'))
+    return device.casefold() == 'gpu'
 
 def countModelParams(model):
     num_learning_parameters = num_total_parameters = 0
@@ -192,9 +251,10 @@ def save_checkpoint(dir, filename, **checkpoint_vars):
     os.makedirs(dir, exist_ok=True)
     t.save(checkpoint_vars, os.path.join(dir, filename))
 
-def save_weights(dir, filename, model):
+def save_weights(dir, filename, model_state_dict, mixed_precision):
     os.makedirs(dir, exist_ok=True)
-    t.save({'model_state_dict': model.state_dict()}, os.path.join(dir, filename))
+    t.save({'model_state_dict': model_state_dict, 'mixed_precision': mixed_precision, 'amp_state_dict': apex.amp.state_dict() if mixed_precision else None},
+           os.path.join(dir, filename))
 
 def make_input_output_visualization(input_image, output_map, class_rgb_color, blend_factor=0.4):
     assert input_image.shape[-2:] == output_map.shape[-2:]

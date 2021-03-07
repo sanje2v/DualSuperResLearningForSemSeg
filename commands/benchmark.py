@@ -12,11 +12,13 @@ from utils import *
 import settings
 
 
-def benchmark(weights, dataset, device, device_obj, num_workers, batch_size, **other_args):
+def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
     # Run benchmark using specified weights and display results
 
     # Time keeper
     process_start_timestamp = datetime.now()
+
+    device_obj = t.device("cuda" if isCUDAdevice(device) else device)
 
     # Create model and set to evaluation mode
     model = DSRL(stage=1, dataset_settings=dataset['settings']).eval()

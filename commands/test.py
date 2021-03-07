@@ -12,8 +12,10 @@ from utils import *
 import consts
 
 
-def test(image_file, images_dir, dataset, output_dir, weights, device, device_obj, compiled_model, **other_args):
+def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_model, **other_args):
     # Testing on a single input image using given weights
+
+    device_obj = t.device("cuda" if isCUDAdevice(device) else device)
 
     if compiled_model:
         model = t.jit.load(weights)

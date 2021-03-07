@@ -3,7 +3,7 @@ import os
 import os.path
 import shutil
 import argparse
-from tqdm.auto import tqdm
+import json
 import numpy as np
 import torch as t
 import torchvision as tv
@@ -14,8 +14,38 @@ from utils import *
 import settings
 
 
+# NOTE: Entry function for distributed spawned workers
+def distributed_main(device_id, args):
+    # All calls to 'print()' is to be redirected to 'tqdm.write()'
+    overrideDefaultPrintWithTQDM()
 
-def main(profiler, **args):
+    # NOTE: args['distributed'] = ['MASTER_ADDR', 'MASTER_PORT', 'NODES', 'DEVICES_PER_NODE', 'BACKEND', 'INIT_METHOD', 'NODE_ID', 'DEVICE_ID', 'WORLD_SIZE', 'RANK']
+    args = json.loads(args)
+    args['distributed'] =\
+    {
+        'MASTER_ADDR': args['distributed'][0],
+        'MASTER_PORT': args['distributed'][1],
+        'NODES': args['distributed'][2],
+        'DEVICES_PER_NODE': args['distributed'][3],
+        'BACKEND': args['distributed'][4],
+        'INIT_METHOD': args['distributed'][5],
+        'NODE_ID': args['distributed'][6],
+        'DEVICE_ID': device_id,
+        'WORLD_SIZE': args['distributed'][2] * args['distributed'][3],      # NODES * DEVICES_PER_NODE
+        'RANK': args['distributed'][6] * args['distributed'][3] + device_id # NODE_ID * DEVICES_PER_NODE + DEVICE_ID
+    }
+
+    os.environ['MASTER_ADDR'] = args['distributed']['MASTER_ADDR']
+    os.environ['MASTER_PORT'] = str(args['distributed']['MASTER_PORT'])    # CAUTION: Cannot assign integer to environmental variable, hence the 'str()'
+    os.environ['WORLD_SIZE'] = str(args['distributed']['WORLD_SIZE'])
+    os.environ['RANK'] = str(args['distributed']['RANK'])
+
+    print(INFO("Rank {:d} worker started.".format(args['distributed']['RANK'])))
+
+    main(args)
+
+
+def main(args):
     # Load variables from checkpoint if resuming training
     if args['command'] == 'resume-train':
         checkpoint_dict = load_checkpoint_or_weights(args['checkpoint'])
@@ -23,17 +53,8 @@ def main(profiler, **args):
         for variable in settings.VARIABLES_IN_CHECKPOINT:
             args[variable] = checkpoint_dict[variable]
 
-    # Check and prepare device, if specified
-    if 'device' in args:
-        args['device_obj'] = t.device('cuda' if args['device'] == 'gpu' else args['device'])
-
-        # Device to perform calculation in
-        if isCUDAdevice(args['device']):
-           if not t.cuda.is_available():
-               raise Exception("CUDA is not available to use for accelerated computing!")
-
-           if 'disable_cudnn_benchmark' in args:
-               t.backends.cudnn.benchmark = not args['disable_cudnn_benchmark']
+    if 'disable_cudnn_benchmark' in args:
+        t.backends.cudnn.benchmark = not args['disable_cudnn_benchmark']
 
     # If there is 'dataset' key specified, add dataset's class, name, split and starting index
     if 'dataset' in args:
@@ -52,7 +73,7 @@ def main(profiler, **args):
 
     # According to 'args.command' call functions in 'commands' module
     if args['command'] in ['train', 'resume-train']:
-        args['is_resuming_train'] = (args['command'] == 'resume-train')
+        args['is_resuming_training'] = (args['command'] == 'resume-train')
         commands.train_or_resume(**args)
     else:
         # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
@@ -83,7 +104,9 @@ if __name__ == '__main__':
 
         # Training arguments
         train_parser = command_parser.add_parser('train', help="Train model for different stages")
-        train_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        train_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, choices=settings.SUPPORTED_DEVICES, help="Device to create model in, cpu/gpu")
+        train_parser.add_argument('--distributed', required=False, nargs=7, metavar=('MASTER_ADDR', 'MASTER_PORT', 'NODES', 'DEVICES_PER_NODE', 'BACKEND', 'INIT_METHOD', 'NODE_ID'), const=settings.SUPPORTED_DISTRIBUTED_BACKENDS, action=ValidateDistributedTrainingOptions, help="Enable distributed training")
+        train_parser.add_argument('--mixed-precision', default=settings.DEFAULT_AMP_OPTIMIZATION_OPTION, type=str.upper, choices=settings.AMP_OPTIMIZATION_OPTIONS, help="Enable mixed precision training with the ability to mixed float16 and 32 using apex optimization flags")
         train_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         train_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         train_parser.add_argument('--num-workers', default=settings.DEFAULT_NUM_WORKERS, type=int, help="No. of workers for data loader")
@@ -110,6 +133,8 @@ if __name__ == '__main__':
         # Resume training from checkpoint arguments
         resume_train_parser = command_parser.add_parser('resume-train', help="Resume training model from checkpoint file")
         resume_train_parser.add_argument('--checkpoint', required=True, type=str, help="Resume training with given checkpoint file")
+        resume_train_parser.add_argument('--distributed', required=False, nargs=7, metavar=('MASTER_ADDR', 'MASTER_PORT', 'NODES', 'DEVICES_PER_NODE', 'BACKEND', 'INIT_METHOD', 'NODE_ID'), const=settings.SUPPORTED_DISTRIBUTED_BACKENDS, action=ValidateDistributedTrainingOptions, help="Enable distributed training")
+        resume_train_parser.add_argument('--dataset', required=True, type=str.casefold, choices=settings.DATASETS.keys(), help="Dataset to operate on")
 
         # Evaluation arguments
         test_parser = command_parser.add_parser('test', help="Test trained weights with a single input image")
@@ -119,7 +144,7 @@ if __name__ == '__main__':
         test_source.add_argument('--dataset', nargs=3, metavar=('DATASET', 'SPLIT', 'STARTING_INDEX'), const=settings.DATASETS, action=ValidateDatasetNameSplitAndIndex, help="Dataset, split and starting index to test from")
         test_parser.add_argument('--output-dir', type=str, default=settings.OUTPUTS_DIR, help="Specify directory where testing results are saved")
         test_parser.add_argument('--weights', required=True, type=str, help="Weights file to use")
-        test_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        test_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, choices=settings.SUPPORTED_DEVICES, help="Device to create model in, cpu/gpu")
         test_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make evaluation slower")
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         test_parser.add_argument('--compiled-model', action='store_true', help="Using compiled model in '--weights' made using 'compile-model' command")
@@ -150,7 +175,7 @@ if __name__ == '__main__':
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
         benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
         benchmark_parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
-        benchmark_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, help="Device to create model in, cpu/gpu/cuda:XX")
+        benchmark_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, choices=settings.SUPPORTED_DEVICES, help="Device to create model in, cpu/gpu")
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
         benchmark_parser.add_argument('--num-workers', default=settings.DEFAULT_NUM_WORKERS, type=int, help="Number of workers for data loader")
         benchmark_parser.add_argument('--batch-size', default=settings.DEFAULT_BATCH_SIZE, type=int, help="Batch size to use for benchmarking")
@@ -165,11 +190,22 @@ if __name__ == '__main__':
         # Validate arguments according to mode
         args = parser.parse_args()
         if args.command == 'train':
-            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+            if args.distributed:
+                if not t.distributed.is_available():
+                    raise argparse.ArgumentTypeError("Installed version of PyTorch is not compiled with distributed training support!")
 
-            if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
-                raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
+                if not isCUDAdevice(args.device):
+                    raise argparse.ArgumentTypeError("'--distributed' option cannot be used with non-CUDA device specified in '--device'!")
+
+            if isCUDAdevice(args.device) and not t.cuda.is_available():
+                raise Exception("CUDA is not available to use for accelerated computing!")
+
+            if not isCUDAdevice(args.device):
+               if args.disable_cudnn_benchmark:
+                   raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
+
+               if args.mixed_precision:
+                   raise argparse.ArgumentTypeError("'--device' specified must be a CUDA device when specifying '--mixed-precision'!")
 
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num-workers' should be greater than or equal to 0!")
@@ -244,8 +280,8 @@ if __name__ == '__main__':
             if not os.path.isfile(args.weights):
                 raise argparse.ArgumentTypeError("Couldn't find weights file '{:s}'!".format(args.weights))
 
-            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+            if isCUDAdevice(args.device) and not t.cuda.is_available():
+                raise Exception("CUDA is not available to use for accelerated computing!")
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
                 raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
@@ -283,8 +319,8 @@ if __name__ == '__main__':
             if not os.path.isfile(args.weights):
                 raise argparse.ArgumentTypeError("Couldn't find the specified weights file '{:s}'!".format(args.weights))
 
-            if not args.device in ['cpu', 'gpu'] and not args.device.startswith('cuda'):
-                raise argparse.ArgumentTypeError("'--device' specified must be 'cpu' or 'gpu' or 'cuda:<Device_Index>'!")
+            if isCUDAdevice(args.device) and not t.cuda.is_available():
+                raise Exception("CUDA is not available to use for accelerated computing!")
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
                 raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
@@ -308,7 +344,10 @@ if __name__ == '__main__':
                                          use_cuda=hasattr(args, 'device') and isCUDAdevice(args.device),
                                          profile_memory=True) as profiler:
             # Do action in 'command'
-            main(profiler, **args.__dict__)
+            if getattr(args, 'distributed', None):
+                t.multiprocessing.spawn(distributed_main, args=(json.dumps(args.__dict__),), nprocs=args.distributed[3], join=True)
+            else:
+                main(args.__dict__)
 
 
     except KeyboardInterrupt:
@@ -324,3 +363,6 @@ if __name__ == '__main__':
             profiling_filename = os.path.join(settings.OUTPUTS_DIR, settings.PROFILING_FILE)
             profiler.export_chrome_trace(profiling_filename)
             print(INFO("Profiling output has been saved to '{:s}'.".format(profiling_filename)))
+
+        if t.distributed.is_initialized():
+            t.distributed.destroy_process_group()

@@ -1,69 +1,113 @@
 import gc
 import os
 import os.path
-from tqdm.auto import tqdm
 import numpy as np
 import torch as t
 import torchvision as tv
+import apex
 from torch.utils import tensorboard as tb
 from datetime import datetime
 
 from models import DSRL
 from models.schedulers import PolynomialLR
-from models.losses import FALoss
 from models.transforms import *
 from metrices import *
 from utils import *
-import settings
 import consts
+import settings
 
 
 
-def train_or_resume(is_resuming_train, device, device_obj, disable_cudnn_benchmark, num_workers, dataset, val_interval, checkpoint_interval,
-                    checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum, weights_decay, poly_power,
-                    stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
-    # Training and Validation on dataset mode
+def train_or_resume(is_resuming_training, device, distributed, mixed_precision, disable_cudnn_benchmark, num_workers, dataset, val_interval,
+                    checkpoint_interval, checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum,
+                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, **other_args):
+    if distributed:
+        # CAUTION: Setting manual seed for 'torch' library is important when executing distributed
+        #          training as we need to make sure all weights of the model are initialized to the
+        #          same value and hence the training is synchronous.
+        t.manual_seed(settings.RANDOM_SEED)
 
-    # Time keeper
-    process_start_timestamp = datetime.now()
+        t.distributed.init_process_group(distributed['BACKEND'],
+                                         distributed['INIT_METHOD'],
+                                         world_size=distributed['WORLD_SIZE'],
+                                         rank=distributed['RANK'])
+        if not t.distributed.is_initialized():
+            raise RuntimeError("Couldn't initialize distributed process group!")
 
-    if not is_resuming_train:
-        best_validation_dict = {}
-
-    # Prevent system from entering sleep state so that long training session is not interrupted
-    if prevent_system_sleep():
-        print(INFO("System will NOT be allowed to sleep until this training is complete/interrupted."))
+        is_master_rank = (distributed['RANK'] == 0)
+        device_obj = t.device('cuda' if isCUDAdevice(device) else device, distributed['DEVICE_ID'] if isCUDAdevice(device) else 0)
     else:
-        print(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
+        is_master_rank = True
+        device_obj = t.device('cuda' if isCUDAdevice(device) else device)
 
-    # Create model according to stage
-    model = DSRL(stage, dataset['settings'])
+    if is_master_rank:
+        # Time keeper
+        process_start_timestamp = datetime.now()
 
-    if is_resuming_train:
-        model.load_state_dict(checkpoint_dict['model_state_dict'], strict=True)
+        if is_resuming_training:
+            best_validation_dict = other_args['best_validation_dict']
+        else:
+            best_validation_dict = {'epoch': -1, 'loss': None}
+
+        # Prevent system from entering sleep state so that long training session is not interrupted
+        if prevent_system_sleep():
+            print(INFO("System will NOT be allowed to sleep until this training is complete/interrupted."))
+        else:
+            print(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
+
+    # Create model according to stage and optimizer
+    model = DSRL(stage, dataset['settings']).to(device_obj)
+    optimizer = t.optim.SGD(model.parameters(),
+                            lr=learning_rate,
+                            momentum=momentum,
+                            weight_decay=weights_decay)
+
+    if is_master_rank:
+        # Print number of training parameters
+        print(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
+
+    if mixed_precision:
+        # Enable mixed precision, if specified
+        # CAUTION: It is recommended to call 'apex.amp.initialize()' before calling 'load_state_dict()' on model and optimizer.
+        #          It should also precede 'torch.nn.parallel.DistributedDataParallel'.
+        model, optimizer = apex.amp.initialize(model, optimizer, opt_level=mixed_precision)
+
+    if is_resuming_training:
+        model.load_state_dict(other_args['model_state_dict'], strict=True)
+        optimizer.load_state_dict(other_args['optimizer_state_dict'])
+        starting_epoch = other_args['epoch']
     else:
+        starting_epoch = 0
+
         # Load initial weight, if any
         if init_weights:
             model.load_state_dict(load_checkpoint_or_weights(init_weights, map_location=device_obj)['model_state_dict'], strict=False)
         else:
             # Load checkpoint from previous stage, if not the first stage
             if stage == 1:
-                print(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
+                if is_master_rank:
+                    print(INFO("Pretrained weights for ResNet101 will be used to initialize network before training."))
                 model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
             else:
                 prev_weights_filename = os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE)
                 if os.path.isfile(prev_weights_filename):
-                    print(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
+                    if is_master_rank:
+                        print(INFO("'{0:s}' weights file from previous stage was found and will be used to initialize network before training.".format(prev_weights_filename)))
                     weights_dict = load_checkpoint_or_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage-1), settings.FINAL_WEIGHTS_FILE), map_location=device_obj)
                     model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                 else:
-                    print(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
+                    if is_master_rank:
+                        print(CAUTION("'{0:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
 
-    # Copy the model into 'device_obj' memory
-    model = model.to(device_obj)
+    if distributed:
+        model = apex.parallel.DistributedDataParallel(model) if mixed_precision else t.nn.parallel.DistributedDataParallel(model, device_ids=[distributed['DEVICE_ID']])
 
-    # Print number of training parameters
-    print(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
+    # Initialize training scheduler
+    scheduler = PolynomialLR(optimizer,
+                             max_decay_steps=epochs,
+                             end_learning_rate=end_learning_rate,
+                             power=poly_power,
+                             last_epoch=(starting_epoch - 1))
 
     # Prepare data from CityScapes dataset
     os.makedirs(dataset['path'], exist_ok=True)
@@ -83,25 +127,33 @@ def train_or_resume(is_resuming_train, device, device_obj, disable_cudnn_benchma
     train_dataset = dataset['class'](dataset['path'],
                                      split='train',
                                      transforms=train_joint_transforms)
+    train_sampler = t.utils.data.DistributedSampler(train_dataset,
+                                                    distributed['WORLD_SIZE'],
+                                                    distributed['RANK'],
+                                                    shuffle=True,
+                                                    seed=settings.RANDOM_SEED,
+                                                    drop_last=True) if distributed else None
     train_loader = t.utils.data.DataLoader(train_dataset,
                                            batch_size=batch_size,
-                                           shuffle=True,
+                                           shuffle=(train_sampler is None),
+                                           sampler=train_sampler,
                                            num_workers=num_workers,
                                            pin_memory=isCUDAdevice(device),
                                            drop_last=True)
 
-    val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                         lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
-    val_dataset = dataset['class'](dataset['path'],
-                                   split='val',
-                                   transforms=val_joint_transforms)
-    val_loader = t.utils.data.DataLoader(val_dataset,
-                                         batch_size=batch_size,
-                                         shuffle=False,
-                                         num_workers=num_workers,
-                                         pin_memory=isCUDAdevice(device),
-                                         drop_last=False)
+    if is_master_rank:
+        val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
+                                             lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
+                                             lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
+        val_dataset = dataset['class'](dataset['path'],
+                                       split='val',
+                                       transforms=val_joint_transforms)
+        val_loader = t.utils.data.DataLoader(val_dataset,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             num_workers=num_workers,
+                                             pin_memory=isCUDAdevice(device),
+                                             drop_last=False)
 
     # Make sure proper log directories exist
     train_logs_dir = settings.LOGS_DIR.format(stage=stage, mode='train')
@@ -109,68 +161,58 @@ def train_or_resume(is_resuming_train, device, device_obj, disable_cudnn_benchma
     os.makedirs(train_logs_dir, exist_ok=True)
     os.makedirs(val_logs_dir, exist_ok=True)
 
-    # Write training parameters provided to params.txt log file
-    _write_params_file(os.path.join(experiment_id, train_logs_dir, settings.PARAMS_FILE),
-                       "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
-                       "Device: {:s}".format(device),
-                       "Disable CUDNN benchmark mode: {:}".format(disable_cudnn_benchmark) if isCUDAdevice(device) else None,
-                       "No. of workers: {:d}".format(num_workers),
-                       "Dataset: {:s}".format(dataset['name']),
-                       "Dataset path: {:s}".format(dataset['path']),
-                       "Validation interval: {:d}".format(val_interval),
-                       "Checkpoint interval: {:d}".format(checkpoint_interval),
-                       "Checkpoint history: {:d}".format(checkpoint_history),
-                       "Initial weights: {:s}".format(init_weights) if init_weights else None,
-                       "Resuming checkpoint: {:s}".format(other_args['checkpoint']) if is_resuming_train else None,
-                       "Batch size: {:d}".format(batch_size),
-                       "Epochs: {:d}".format(epochs),
-                       "Learning rate: {:f}".format(learning_rate),
-                       "End learning rate: {:f}".format(end_learning_rate),
-                       "Momentum: {:f}".format(momentum),
-                       "Weights decay: {:f}".format(weights_decay),
-                       "Poly power: {:f}".format(poly_power),
-                       "Stage: {:d}".format(stage),
-                       "Loss Weight 1: {:.4f}".format(w1) if stage > 1 else None,
-                       "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
-                       "Freeze batch normalization: {:}".format(freeze_batch_norm),
-                       "Experiment ID: {:}".format(experiment_id) if experiment_id else None,
-                       "Description: {:s}".format(description) if description else None,
-                       "Early stopping: {:}".format(early_stopping))
+    if is_master_rank:
+        # Write training commandline parameters provided to 'params.txt' log file
+        _write_params_file(os.path.join(experiment_id, train_logs_dir, settings.PARAMS_FILE),
+                           "Timestamp: {:s}".format(process_start_timestamp.strftime("%c")),
+                           "Device: {:s}".format(device),
+                           "Distributed: {:}".format(distributed) if distributed else None,
+                           "Mixed Precision: {:s}".format(mixed_precision) if mixed_precision else None,
+                           "Disable CuDNN benchmark mode: {:}".format(disable_cudnn_benchmark) if isCUDAdevice(device) else None,
+                           "No. of workers: {:d}".format(num_workers),
+                           "Dataset: {:s}".format(dataset['name']),
+                           "Dataset path: {:s}".format(dataset['path']),
+                           "Validation interval: {:d}".format(val_interval),
+                           "Checkpoint interval: {:d}".format(checkpoint_interval),
+                           "Checkpoint history: {:d}".format(checkpoint_history),
+                           "Initial weights: {:s}".format(init_weights) if init_weights else None,
+                           "Resuming checkpoint: {:s}".format(other_args['checkpoint']) if is_resuming_training else None,
+                           "Batch size: {:d}".format(batch_size),
+                           "Epochs: {:d}".format(epochs),
+                           "Learning rate: {:f}".format(learning_rate),
+                           "End learning rate: {:f}".format(end_learning_rate),
+                           "Momentum: {:f}".format(momentum),
+                           "Weights decay: {:f}".format(weights_decay),
+                           "Poly power: {:f}".format(poly_power),
+                           "Stage: {:d}".format(stage),
+                           "Loss Weight 1: {:.4f}".format(w1) if stage > 1 else None,
+                           "Loss Weight 2: {:.4f}".format(w2) if stage > 2 else None,
+                           "Freeze batch normalization: {:}".format(freeze_batch_norm),
+                           "Experiment ID: {:}".format(experiment_id) if experiment_id else None,
+                           "Description: {:s}".format(description) if description else None,
+                           "Early stopping: {:}".format(early_stopping))
 
     # Start training and validation
-    with tb.SummaryWriter(log_dir=train_logs_dir) as train_logger,\
-         tb.SummaryWriter(log_dir=val_logs_dir) as val_logger:
+    with ConditionalContextManager(is_master_rank, lambda: tb.SummaryWriter(log_dir=train_logs_dir)) as train_logger,\
+         ConditionalContextManager(is_master_rank, lambda: tb.SummaryWriter(log_dir=val_logs_dir)) as val_logger:
 
-        # Training optimizer and schedular
-        optimizer = t.optim.SGD(model.parameters(),
-                                lr=learning_rate,
-                                momentum=momentum,
-                                weight_decay=weights_decay)
-        if is_resuming_train:
-            optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
-            starting_epoch = checkpoint_dict['epoch']
-        else:
-            starting_epoch = 0
+        if is_master_rank:
+            # Start training and then validation after specific intervals
+            train_logger.add_text("INFO", "Training started on {:s}.".format(process_start_timestamp.strftime("%c")), 1)
+            log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
+            print('\n' + INFO(log_string))
 
-        scheduler = PolynomialLR(optimizer,
-                                 max_decay_steps=epochs,
-                                 end_learning_rate=end_learning_rate,
-                                 power=poly_power,
-                                 last_epoch=(starting_epoch - 1))
-
-        # Start training and then validation after specific intervals
-        train_logger.add_text("INFO", "Training started on {:s}.".format(process_start_timestamp.strftime("%c")), 1)
-        log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
-        print('\n' + INFO(log_string))
+            training_epoch_timetaken_list = []
 
         gc.collect()    # Let's free as much unreferenced variables memory as possible before starting training
-        training_epoch_timetaken_list = []
         for epoch in range((starting_epoch + 1), (epochs + 1)):
-            log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
-            print(log_string)
+            if is_master_rank:
+                log_string = "\nEPOCH {0:d}/{1:d}".format(epoch, epochs)
+                print(log_string)
+
+                training_epoch_begin_timestamp = datetime.now()
 
             # Do training for this epoch
-            training_epoch_begin_timestamp = datetime.now()
             CE_train_avg_loss,\
             MSE_train_avg_loss,\
             FA_train_avg_loss,\
@@ -183,127 +225,129 @@ def train_or_resume(is_resuming_train, device, device_obj, disable_cudnn_benchma
                                            data_loader=train_loader,
                                            w1=w1,
                                            w2=w2,
+                                           is_master_rank=is_master_rank,
                                            logger=train_logger,
+                                           mixed_precision=mixed_precision,
                                            freeze_batch_norm=freeze_batch_norm,
                                            optimizer=optimizer,
                                            scheduler=scheduler)
 
-            # Log training losses for this epoch to TensorBoard
-            train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss, epoch)
-            if stage > 1:
-                train_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_train_avg_loss, epoch)
-                if stage > 2:
-                    train_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_train_avg_loss, epoch)
-                train_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_train_loss, epoch)
-
-            # Log learning rate for this epoch to TensorBoard
-            train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
-
-            # Auto save whole model between 'checkpoint_interval' epochs
-            if checkpoint_history > 0 and epoch % checkpoint_interval == 0:
-                # Prepare some variables to save in checkpoint
-                best_validation_dict = None
-                model_state_dict = model.state_dict()
-                optimizer_state_dict = optimizer.state_dict()
-                CE_val_avg_loss = None
-                MSE_val_avg_loss = None
-                FA_val_avg_loss = None
-                Avg_val_loss = None
-
-                checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
-                save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
-                                settings.CHECKPOINT_FILE.format(epoch=epoch),
-                                **checkpoint_variables_dict)
-                print(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
-                                                                                             settings.CHECKPOINTS_DIR.format(stage=stage))))
-
-                # Delete old autosaves, if any
-                checkpoint_epoch_to_delete = epoch - checkpoint_history * checkpoint_interval
-                checkpoint_to_delete_filename = os.path.join(experiment_id,
-                                                             settings.CHECKPOINTS_DIR.format(stage=stage),
-                                                             settings.CHECKPOINT_FILE.format(epoch=checkpoint_epoch_to_delete))
-                if os.path.isfile(checkpoint_to_delete_filename):
-                    os.remove(checkpoint_to_delete_filename)
-
-            if epoch % val_interval == 0:
-                # Do validation at epoch intervals of 'val_interval'
-                CE_val_avg_loss,\
-                MSE_val_avg_loss,\
-                FA_val_avg_loss,\
-                Avg_val_loss = _do_train_val(do_train=False,
-                                             model=model,
-                                             dataset_settings=dataset['settings'],
-                                             device_obj=device_obj,
-                                             batch_size=batch_size,
-                                             stage=stage,
-                                             data_loader=val_loader,
-                                             w1=w1,
-                                             w2=w2,
-                                             logger=val_logger)
-
-                # Save epoch number and total error of best validation and then checkpoint
-                if not best_validation_dict or Avg_val_loss < best_validation_dict['loss']:
-                    # Prepare some variables to save in checkpoint
-                    best_validation_dict['epoch'] = epoch
-                    best_validation_dict['loss'] = Avg_val_loss
-                    model_state_dict = model.state_dict()
-                    optimizer_state_dict = optimizer.state_dict()
-
-                    checkpoint_variables_dict = dict([(x, eval(x)) for x in settings.VARIABLES_IN_CHECKPOINT])
-                    save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
-                                    settings.CHECKPOINT_FILE.format(epoch='_bestval'),
-                                    **checkpoint_variables_dict)
-
-                # Log validation losses for this epoch to TensorBoard
-                val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss, epoch)
+            if is_master_rank:
+                # Log training losses for this epoch to TensorBoard
+                train_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_train_avg_loss, epoch)
                 if stage > 1:
-                    val_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_val_avg_loss, epoch)
+                    train_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_train_avg_loss, epoch)
                     if stage > 2:
-                        val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss, epoch)
-                    val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss, epoch)
+                        train_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_train_avg_loss, epoch)
+                    train_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_train_loss, epoch)
 
-                # If early stopping is enabled, check if average training error is less than average
-                # validation error, and if so, stop training
-                if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
-                    log_string = "Early stopping was triggered in epoch {:d}.".format(epoch)
-                    train_logger.add_text("INFO", log_string)
-                    print(INFO(log_string))
-                    break
+                # Log learning rate for this epoch to TensorBoard
+                train_logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
+
+                # Auto save whole model between 'checkpoint_interval' epochs
+                if checkpoint_history > 0 and epoch % checkpoint_interval == 0:
+                    # Prepare some variables to save in checkpoint
+                    model_state_dict = _get_state_dict(model)
+                    optimizer_state_dict = optimizer.state_dict()
+                    amp_state_dict = apex.amp.state_dict() if mixed_precision else None
+                    CE_val_avg_loss = None
+                    MSE_val_avg_loss = None
+                    FA_val_avg_loss = None
+                    Avg_val_loss = None
+
+                    checkpoint_variables_dict = {}
+                    for var in settings.VARIABLES_IN_CHECKPOINT:
+                        checkpoint_variables_dict[var] = locals()[var]
+                    save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
+                                    settings.CHECKPOINT_FILE.format(epoch=epoch),
+                                    **checkpoint_variables_dict)
+                    print(INFO("Autosaved checkpoint for epoch {0:d} under '{1:s}'.".format(epoch,
+                                                                                            settings.CHECKPOINTS_DIR.format(stage=stage))))
+
+                    # Delete old autosaves, if any
+                    checkpoint_epoch_to_delete = epoch - checkpoint_history * checkpoint_interval
+                    if checkpoint_epoch_to_delete > 0:
+                        checkpoint_to_delete_filename = os.path.join(experiment_id,
+                                                                     settings.CHECKPOINTS_DIR.format(stage=stage),
+                                                                     settings.CHECKPOINT_FILE.format(epoch=checkpoint_epoch_to_delete))
+                        if os.path.isfile(checkpoint_to_delete_filename):
+                            os.remove(checkpoint_to_delete_filename)
+
+                if epoch % val_interval == 0:
+                    # Do validation at epoch intervals of 'val_interval'
+                    CE_val_avg_loss,\
+                    MSE_val_avg_loss,\
+                    FA_val_avg_loss,\
+                    Avg_val_loss = _do_train_val(do_train=False,
+                                                 model=model,
+                                                 dataset_settings=dataset['settings'],
+                                                 device_obj=device_obj,
+                                                 batch_size=batch_size,
+                                                 stage=stage,
+                                                 data_loader=val_loader,
+                                                 w1=w1,
+                                                 w2=w2,
+                                                 is_master_rank=is_master_rank,
+                                                 logger=val_logger,
+                                                 mixed_precision=mixed_precision)
+
+                    # Save epoch number and total error of best validation and then checkpoint
+                    if best_validation_dict['loss'] is None or Avg_val_loss < best_validation_dict['loss']:
+                        # Prepare some variables to save in checkpoint
+                        best_validation_dict['epoch'] = epoch
+                        best_validation_dict['loss'] = Avg_val_loss
+                        model_state_dict = _get_state_dict(model)
+                        optimizer_state_dict = optimizer.state_dict()
+                        amp_state_dict = apex.amp.state_dict() if mixed_precision else None
+
+                        checkpoint_variables_dict = {}
+                        for var in settings.VARIABLES_IN_CHECKPOINT:
+                            checkpoint_variables_dict[var] = locals()[var]
+                        save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
+                                        settings.CHECKPOINT_FILE.format(epoch='_bestval'),
+                                        **checkpoint_variables_dict)
+
+                    # Log validation losses for this epoch to TensorBoard
+                    val_logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_val_avg_loss, epoch)
+                    if stage > 1:
+                        val_logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_val_avg_loss, epoch)
+                        if stage > 2:
+                            val_logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_val_avg_loss, epoch)
+                        val_logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_val_loss, epoch)
+
+                    # If early stopping is enabled, check if average training error is less than average
+                    # validation error, and if so, stop training
+                    if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
+                        log_string = "Early stopping was triggered in epoch {:d}.".format(epoch)
+                        train_logger.add_text("INFO", log_string)
+                        print(INFO(log_string))
+                        break
 
             # Calculate new learning rate for next epoch
             scheduler.step()
 
-            # Print estimated time for training completion
-            training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds())
-            training_epoch_avg_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
-            print("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
+            if is_master_rank:
+                # Print estimated time for training completion
+                training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds())
+                training_epoch_avg_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem
+                print("Est. training completion in {:s}.".format(makeSecondsPretty(training_epoch_avg_timetaken * (epochs - epoch))))
 
-        # Save training weights for this stage
-        save_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage)), settings.FINAL_WEIGHTS_FILE, model)
+        if is_master_rank:
+            # Save training weights for this stage
+            save_weights(os.path.join(experiment_id, settings.WEIGHTS_DIR.format(stage=stage)), settings.FINAL_WEIGHTS_FILE, _get_state_dict(model), mixed_precision)
 
-        process_end_timestamp = datetime.now()
-        process_time_taken = (process_end_timestamp - process_start_timestamp).total_seconds()
-        train_logger.add_text("INFO",
-                              "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken),
-                                                                                   process_end_timestamp.strftime("%c")),
-                              epochs)
-        log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
-        print('\n' + INFO(log_string))
+            process_end_timestamp = datetime.now()
+            process_time_taken = (process_end_timestamp - process_start_timestamp).total_seconds()
+            train_logger.add_text("INFO",
+                                  "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken),
+                                                                                       process_end_timestamp.strftime("%c")),
+                                  epochs)
+            log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
+            print('\n' + INFO(log_string))
 
 
-def _do_train_val(do_train,
-                  model,
-                  dataset_settings,
-                  device_obj,
-                  batch_size,
-                  stage,
-                  data_loader,
-                  w1,
-                  w2,
-                  logger,
-                  freeze_batch_norm=False,
-                  optimizer=None,
-                  scheduler=None):
+def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, stage, data_loader, w1, w2, is_master_rank,
+                  logger, mixed_precision, freeze_batch_norm=False, optimizer=None, scheduler=None):
     # Set model to either training or testing mode
     model.train(mode=do_train)
 
@@ -319,12 +363,13 @@ def _do_train_val(do_train,
     FA_avg_loss = AverageMeter('FA Avg. Loss')
     Avg_loss = AverageMeter('Avg. Loss')
 
-    with t.set_grad_enabled(mode=do_train), tqdm(total=len(data_loader),
-                                                 desc='TRAINING' if do_train else 'VALIDATING',
-                                                 colour='green' if do_train else 'yellow',
-                                                 position=0 if do_train else 1,
-                                                 leave=False,
-                                                 bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
+    with t.set_grad_enabled(mode=do_train),\
+         ConditionalContextManager(is_master_rank, lambda: tqdm(total=len(data_loader),
+                                                                  desc='TRAINING' if do_train else 'VALIDATING',
+                                                                  colour='green' if do_train else 'yellow',
+                                                                  position=0 if do_train else 1,
+                                                                  leave=False,
+                                                                  bar_format=settings.PROGRESSBAR_FORMAT)) as progressbar:
         if not do_train:
             # NOTE: We randomly select a batch index in validation to save input image and model's output
             #   to save in TensorBoard log.
@@ -363,7 +408,8 @@ def _do_train_val(do_train,
             total_loss = CE_loss + MSE_loss + FA_loss
 
             if do_train:
-                total_loss.backward()     # Backpropagate
+                with ConditionalContextManager(mixed_precision, lambda: apex.amp.scale_loss(total_loss, optimizer, model=model), lambda: total_loss) as scaled_total_loss:
+                    scaled_total_loss.backward()     # Backpropagate
                 optimizer.step()          # Increment global step
 
             # Convert loss tensors to float on CPU memory
@@ -381,17 +427,18 @@ def _do_train_val(do_train,
             FA_avg_loss.update(FA_loss, input_scaled.shape[0])
             Avg_loss.update(total_loss, input_scaled.shape[0])
 
-            # Add loss information to progress bar
-            log_string = []
-            log_string.append("CE: {:.4f}".format(CE_loss))
-            if stage > 1:
-                log_string.append("MSE: {:.4f}".format(MSE_loss))
-                if stage > 2:
-                    log_string.append("FA: {:.4f}".format(FA_loss))
-                log_string.append("Total: {:.3f}".format(total_loss))
-            log_string = ', '.join(log_string)
-            progressbar.set_postfix_str("Losses [{0}]".format(log_string))
-            progressbar.update()
+            if is_master_rank:
+                # Add loss information to progress bar
+                log_string = []
+                log_string.append("CE: {:.4f}".format(CE_loss))
+                if stage > 1:
+                    log_string.append("MSE: {:.4f}".format(MSE_loss))
+                    if stage > 2:
+                        log_string.append("FA: {:.4f}".format(FA_loss))
+                    log_string.append("Total: {:.3f}".format(total_loss))
+                log_string = ', '.join(log_string)
+                progressbar.set_postfix_str("Losses [{0}]".format(log_string))
+                progressbar.update()
 
             # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
             if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
@@ -403,17 +450,18 @@ def _do_train_val(do_train,
                 logger.add_image("EXAMPLE",
                                  make_input_output_visualization(input_org, SSSR_output, dataset_settings.CLASS_RGB_COLOR))
 
-        # Show learning rate and average losses before ending epoch
-        log_string = []
-        log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]) if do_train else "Validation results:")
-        log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss.avg))
-        if stage > 1:
-            log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss.avg))
-            if stage > 2:
-                log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
-            log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
-        log_string = ', '.join(log_string)
-        print(log_string)
+        if is_master_rank:
+            # Show learning rate and average losses before ending epoch
+            log_string = []
+            log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]) if do_train else "Validation results:")
+            log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss.avg))
+            if stage > 1:
+                log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss.avg))
+                if stage > 2:
+                    log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
+                log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
+            log_string = ', '.join(log_string)
+            print(log_string)
 
     return CE_avg_loss.avg, MSE_avg_loss.avg, FA_avg_loss.avg, Avg_loss.avg
 
@@ -422,3 +470,6 @@ def _write_params_file(filename, *list_params):
     list_params = list(filter(lambda x: x is not None, list_params))    # Remove all 'None' items
     with open(filename, mode='w') as params_file:
         params_file.write('\n'.join(list_params))   # NOTE: '\n' here automatically converts it to newline for the current platform
+
+def _get_state_dict(model):
+    return model.module.state_dict() if isinstance(model, t.nn.parallel.DistributedDataParallel) else model.state_dict()

@@ -1,16 +1,12 @@
 import os.path
 import collections
 import torch as t
+import apex.parallel
 import torchvision as tv
 from functools import partial
 
 from datasets import Cityscapes
 
-
-DEFAULT_DTYPE = t.float32
-t.set_default_dtype(DEFAULT_DTYPE)
-# NOTE: Put all batch normalization class types here so that 'freeze batch normalization layer' can work properly
-BATCHNORM_MODULE_CLASSES = (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm)
 
 # Minimum required library versions
 version_tuple = collections.namedtuple("Row", ["major", "minor"])
@@ -19,8 +15,22 @@ MIN_PYTORCH_VERSION = version_tuple(major=1, minor=7)
 MIN_TORCHVISION_VERSION = version_tuple(major=0, minor=8)
 MIN_NUMPY_VERSION = version_tuple(major=1, minor=19)
 
+# PyTorch library
+DEFAULT_DTYPE = t.float32
+assert DEFAULT_DTYPE in [t.float16, t.float32], "BUG CHECK: settings.DEFAULT_DTYPE can only be either t.float16 or t.float32!"
+t.set_default_dtype(DEFAULT_DTYPE)
+# NOTE: Put all batch normalization class types here so that 'freeze batch normalization layer' can work properly
+BATCHNORM_MODULE_CLASSES = (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm, apex.parallel.SyncBatchNorm)
+SUPPORTED_DEVICES = ['cpu', 'gpu']
+SUPPORTED_DISTRIBUTED_BACKENDS = ['gloo', 'mpi', 'nccl']
+RANDOM_SEED = 54321
+
+# Apex multi precision library
+AMP_OPTIMIZATION_OPTIONS = [None, 'O0', 'O1', 'O2', 'O3']
+
 # Default values for commandline arguments
 DEFAULT_DEVICE = 'gpu'
+DEFAULT_AMP_OPTIMIZATION_OPTION = AMP_OPTIMIZATION_OPTIONS[0]
 DEFAULT_NUM_WORKERS = 4
 DEFAULT_VAL_INTERVAL = 10
 DEFAULT_CHECKPOINT_INTERVAL = 5
@@ -58,8 +68,7 @@ DATASETS =\
 DATASETS = {k.casefold(): v for k, v in DATASETS.items()}   # CAUTION: Make sure the dataset names (keys) and split values are all lowercase
 
 VARIABLES_IN_CHECKPOINT =\
-['device', 'disable_cudnn_benchmark', 'num_workers', 'val_interval', 'checkpoint_interval', 'checkpoint_history',
- 'init_weights', 'batch_size', 'epochs', 'learning_rate', 'end_learning_rate', 'momentum', 'weights_decay',
- 'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'experiment_id', 'description', 'early_stopping',
- 'best_validation_dict', 'CE_train_avg_loss', 'MSE_train_avg_loss', 'FA_train_avg_loss', 'Avg_train_loss',
- 'CE_val_avg_loss', 'MSE_val_avg_loss', 'FA_val_avg_loss', 'Avg_val_loss']
+['device', 'mixed_precision', 'amp_state_dict', 'disable_cudnn_benchmark', 'num_workers', 'val_interval', 'checkpoint_interval', 'checkpoint_history', 'init_weights',
+ 'batch_size', 'epochs', 'learning_rate', 'end_learning_rate', 'momentum', 'weights_decay', 'poly_power', 'stage', 'w1', 'w2', 'freeze_batch_norm', 'experiment_id',
+ 'description', 'early_stopping', 'CE_train_avg_loss', 'MSE_train_avg_loss', 'FA_train_avg_loss', 'Avg_train_loss', 'CE_val_avg_loss', 'MSE_val_avg_loss',
+ 'FA_val_avg_loss', 'Avg_val_loss', 'epoch', 'best_validation_dict', 'model_state_dict', 'optimizer_state_dict', 'amp_state_dict']
