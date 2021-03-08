@@ -1,7 +1,8 @@
 import torch as t
 import torch.nn.functional as F
 
-class DuplicateToScaledImageTransform(t.nn.Module):
+
+class JointScaledImages(t.nn.Module):
     """Duplcate a ``Tensor Image`` to a new tensor image of scaled size.
     """
 
@@ -12,16 +13,17 @@ class DuplicateToScaledImageTransform(t.nn.Module):
         super().__init__()
         self.new_sizes = new_sizes
 
-    def forward(self, pic_tensor):
+    def forward(self, img:t.Tensor, seg):
         """
         Args:
-            pic_tensor (Tensor Image): Image tensor to scale.
+            img (Tensor Image): Image tensor to scale.
+            seg: Segmentation map
 
         Returns:
-            (Tensor, ...): Tuple of resized image tensors sames as the number of 'new_sizes'.
+            (Tensor, ...), seg: Tuple of resized image tensors sames as the number of 'new_sizes' and unaltered segmentation mask.
         """
-        pic_tensor = t.unsqueeze(pic_tensor, dim=0)
-        return [t.squeeze(F.interpolate(pic_tensor, size=self.new_sizes[i], mode='bilinear', align_corners=True), dim=0) for i in range(len(self.new_sizes))]
+        img = t.unsqueeze(img, dim=0)
+        return [t.squeeze(F.interpolate(img, size=self.new_sizes[i], mode='bilinear', align_corners=True), dim=0) for i in range(len(self.new_sizes))], seg
 
     def __repr__(self):
         return self.__class__.__name__ + '()'

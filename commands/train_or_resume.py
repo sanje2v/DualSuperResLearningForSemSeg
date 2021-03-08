@@ -4,7 +4,6 @@ import os.path
 import numpy as np
 import apex
 import torch as t
-import torchvision as tv
 import torch.nn.functional as F
 from torch.utils import tensorboard as tb
 from datetime import datetime
@@ -115,16 +114,18 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
     if os.path.getsize(dataset['path']) == 0:
         raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'.".format(dataset['path'])))
 
+    # CAUTION: When 'num_workers' > 0, the compose classes in the following must be pick-able.
+    #          So, no lambdas, numba etc in them.
     train_joint_transforms = JointCompose([JointRandomRotate(degrees=15.0, fill=(0, 0)),
                                            JointRandomCrop(min_scale=1.0, max_scale=3.5),
                                            JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                           lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4)(img), seg),
+                                           JointColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4),
                                            JointHFlip(),
                                            # CAUTION: 'kernel_size' should be > 0 and odd integer
-                                           lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
-                                           lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
-                                           lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                           lambda img, seg: (DuplicateToScaledImageTransform(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))(img), seg)])
+                                           JointRandomGaussianBlur(kernel_size=3, p=0.5),
+                                           JointRandomGrayscale(p=0.1),
+                                           JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
+                                           JointScaledImages(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))])
     train_dataset = dataset['class'](dataset['path'],
                                      split='train',
                                      transforms=train_joint_transforms)
@@ -144,8 +145,8 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
     if is_master_rank:
         val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                             lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                             lambda img, seg: (DuplicateToScaledImageTransform(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))(img), seg)])
+                                             JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
+                                             JointScaledImages(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))])
         val_dataset = dataset['class'](dataset['path'],
                                        split='val',
                                        transforms=val_joint_transforms)
@@ -450,6 +451,7 @@ def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, sta
                                 np.array(dataset_settings.MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
                     input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
                     SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
+                    SSSR_output = F.interpolate(SSSR_output, size=input_org.shape[-2:], mode='nearest')
                     logger.add_image("EXAMPLE",
                                      make_input_output_visualization(input_org, SSSR_output, dataset_settings.CLASS_RGB_COLOR))
 

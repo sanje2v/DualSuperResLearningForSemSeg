@@ -109,13 +109,13 @@
     <Compile Include="models\schedulers\__init__.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="models\transforms\ColorJitter2.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="models\transforms\DuplicateToScaledImageTransform.py">
+    <Compile Include="models\transforms\JointColorJitter.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\JointCompose.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\JointRandomGaussianBlur.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\JointHFlip.py">
@@ -124,10 +124,19 @@
     <Compile Include="models\transforms\JointImageAndLabelTensor.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\transforms\JointNormalize.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\transforms\JointRandomCrop.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\transforms\JointRandomGrayscale.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="models\transforms\JointRandomRotate.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="models\transforms\JointScaledImages.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\__init__.py">

@@ -4,15 +4,12 @@
 # Ref: https://stackoverflow.com/questions/8507885/shift-hue-of-an-rgb-color
 
 import torch as t
-import torchvision as tv
 import torchvision.transforms.functional as F
 import numpy as np
-import numba as nb
 import numbers
-import random
 
 
-class ColorJitter2(t.nn.Module):
+class JointColorJitter(t.nn.Module):
     """Randomly change the brightness, contrast and saturation of an image.
 
     Args:
@@ -58,22 +55,7 @@ class ColorJitter2(t.nn.Module):
             value = None
         return value
 
-    @staticmethod
-    @nb.jit(nopython=True, parallel=True, cache=True, inline='always')
-    def _accelerated_matmul(img, hue_rotation_matrix):
-        for row in nb.prange(img.shape[-2]):
-            for col in nb.prange(img.shape[-1]):
-                img[0, row, col] = img[0, row, col] * hue_rotation_matrix[0, 0] + img[1, row, col] * hue_rotation_matrix[0, 1] + img[2, row, col] * hue_rotation_matrix[0, 2]
-                img[1, row, col] = img[0, row, col] * hue_rotation_matrix[1, 0] + img[1, row, col] * hue_rotation_matrix[1, 1] + img[2, row, col] * hue_rotation_matrix[1, 2]
-                img[2, row, col] = img[0, row, col] * hue_rotation_matrix[2, 0] + img[1, row, col] * hue_rotation_matrix[2, 1] + img[2, row, col] * hue_rotation_matrix[2, 2]
-
-    @staticmethod
-    def _rotate_hue(img, hue_rotation_matrix):
-        hue_rotation_matrix = np.array(hue_rotation_matrix, dtype=img.numpy().dtype) # CAUTION: Important to keep data types to same type of float
-        ColorJitter2._accelerated_matmul(img.numpy(), hue_rotation_matrix)
-        return t.clip(img, min=0., max=1.)
-
-    def forward(self, img):
+    def forward(self, img, seg):
         """
         Args:
             img (Tensor): Input image.
@@ -112,9 +94,11 @@ class ColorJitter2(t.nn.Module):
                     [[cosA + (1.0 - cosA) / 3.0, 1./3. * (1.0 - cosA) - np.sqrt(1./3.) * sinA, 1./3. * (1.0 - cosA) + np.sqrt(1./3.) * sinA],
                      [1./3. * (1.0 - cosA) + np.sqrt(1./3.) * sinA, cosA + 1./3.*(1.0 - cosA), 1./3. * (1.0 - cosA) - np.sqrt(1./3.) * sinA],
                      [1./3. * (1.0 - cosA) - np.sqrt(1./3.) * sinA, 1./3. * (1.0 - cosA) + np.sqrt(1./3.) * sinA, cosA + 1./3. * (1.0 - cosA)]]
-                img = ColorJitter2._rotate_hue(img, hue_rotation_matrix)
 
-        return img
+                img = img.permute(1, 2, 0) @ t.as_tensor(hue_rotation_matrix, dtype=img.dtype)
+                img = t.clip(img.permute(2, 0, 1), min=0., max=1.)
+
+        return img, seg
 
     def __repr__(self):
         format_string = self.__class__.__name__ + '('
