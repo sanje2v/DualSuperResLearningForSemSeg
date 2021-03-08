@@ -3,7 +3,6 @@ import os.path
 import apex
 import argparse
 import inspect
-import collections
 import platform
 import ctypes
 import termcolor

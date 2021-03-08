@@ -14,7 +14,7 @@
     <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 10 --description "Stage 1 training with 10 epochs" --batch-size 2 --num-workers 0 --device gpu --val-interval 1 --checkpoint-interval 1 --dataset cityscapes</CommandLineArguments>
+    <CommandLineArguments>train --stage 1 --epochs 10 --description "Stage 1 training with 10 epochs" --batch-size 2 --num-workers 0 --device gpu --val-interval 1 --checkpoint-interval 1 --dataset cityscapes --distributed localhost 8008 1 1 gloo "file:///c:/Users/Sanjeev/AppData/Local/Temp/test.txt" 0</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>

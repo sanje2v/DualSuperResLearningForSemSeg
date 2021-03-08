@@ -24,7 +24,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
     if distributed:
         # CAUTION: Setting manual seed for 'torch' library is important when executing distributed
         #          training as we need to make sure all weights of the model are initialized to the
-        #          same value and hence the training is synchronous.
+        #          same value and hence the training is synchronous across processes.
         t.manual_seed(settings.RANDOM_SEED)
 
         t.distributed.init_process_group(distributed['BACKEND'],
@@ -338,16 +338,15 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
             process_end_timestamp = datetime.now()
             process_time_taken = (process_end_timestamp - process_start_timestamp).total_seconds()
-            train_logger.add_text("INFO",
-                                  "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken),
-                                                                                       process_end_timestamp.strftime("%c")),
+            train_logger.add_text("INFO", "Training took {0:s} and completed on {1:s}.".format(makeSecondsPretty(process_time_taken),
+                                                                                               process_end_timestamp.strftime("%c")),
                                   epochs)
             log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
             print('\n' + INFO(log_string))
 
 
-def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, stage, data_loader, w1, w2, is_master_rank,
-                  logger, mixed_precision, freeze_batch_norm=False, optimizer=None, scheduler=None):
+def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, stage, data_loader, w1, w2,
+                  is_master_rank, logger, mixed_precision, freeze_batch_norm=False, optimizer=None, scheduler=None):
     # Set model to either training or testing mode
     model.train(mode=do_train)
 
@@ -365,12 +364,12 @@ def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, sta
 
     with t.set_grad_enabled(mode=do_train),\
          ConditionalContextManager(is_master_rank, lambda: tqdm(total=len(data_loader),
-                                                                  desc='TRAINING' if do_train else 'VALIDATING',
-                                                                  colour='green' if do_train else 'yellow',
-                                                                  position=0 if do_train else 1,
-                                                                  leave=False,
-                                                                  bar_format=settings.PROGRESSBAR_FORMAT)) as progressbar:
-        if not do_train:
+                                                                desc='TRAINING' if do_train else 'VALIDATING',
+                                                                colour='green' if do_train else 'yellow',
+                                                                position=0 if do_train else 1,
+                                                                leave=False,
+                                                                bar_format=settings.PROGRESSBAR_FORMAT)) as progressbar:
+        if is_master_rank and not do_train:
             # NOTE: We randomly select a batch index in validation to save input image and model's output
             #   to save in TensorBoard log.
             RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader)//batch_size)
@@ -440,15 +439,15 @@ def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, sta
                 progressbar.set_postfix_str("Losses [{0}]".format(log_string))
                 progressbar.update()
 
-            # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
-            if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
-                input_org = input_org.detach().cpu().numpy()[0]
-                input_org = np.array(dataset_settings.STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
-                            np.array(dataset_settings.MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
-                input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
-                SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
-                logger.add_image("EXAMPLE",
-                                 make_input_output_visualization(input_org, SSSR_output, dataset_settings.CLASS_RGB_COLOR))
+                # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
+                if not do_train and i == RANDOM_IMAGE_EXAMPLE_INDEX:
+                    input_org = input_org.detach().cpu().numpy()[0]
+                    input_org = np.array(dataset_settings.STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_org +\
+                                np.array(dataset_settings.MEAN).reshape(consts.NUM_RGB_CHANNELS, 1, 1)
+                    input_org = np.clip(input_org * 255., a_min=0.0, a_max=255.).astype(np.uint8)
+                    SSSR_output = np.argmax(SSSR_output.detach().cpu().numpy()[0], axis=0)    # Bring back result to CPU memory and select first in batch
+                    logger.add_image("EXAMPLE",
+                                     make_input_output_visualization(input_org, SSSR_output, dataset_settings.CLASS_RGB_COLOR))
 
         if is_master_rank:
             # Show learning rate and average losses before ending epoch
@@ -472,4 +471,5 @@ def _write_params_file(filename, *list_params):
         params_file.write('\n'.join(list_params))   # NOTE: '\n' here automatically converts it to newline for the current platform
 
 def _get_state_dict(model):
-    return model.module.state_dict() if isinstance(model, t.nn.parallel.DistributedDataParallel) else model.state_dict()
+    # NOTE: This method is required because we need 'state_dict' of our model and NOT 'DistributedDataParallel'
+    return model.module.state_dict() if isinstance(model, (t.nn.parallel.DistributedDataParallel, apex.parallel.DistributedDataParallel)) else model.state_dict()
