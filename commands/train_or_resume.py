@@ -2,9 +2,10 @@ import gc
 import os
 import os.path
 import numpy as np
+import apex
 import torch as t
 import torchvision as tv
-import apex
+import torch.nn.functional as F
 from torch.utils import tensorboard as tb
 from datetime import datetime
 
@@ -123,7 +124,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                                            lambda img, seg: (tv.transforms.RandomApply([tv.transforms.GaussianBlur(kernel_size=3)], p=0.5)(img), seg),
                                            lambda img, seg: (tv.transforms.RandomGrayscale(p=0.1)(img), seg),
                                            lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                           lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
+                                           lambda img, seg: (DuplicateToScaledImageTransform(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))(img), seg)])
     train_dataset = dataset['class'](dataset['path'],
                                      split='train',
                                      transforms=train_joint_transforms)
@@ -144,7 +145,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
     if is_master_rank:
         val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
                                              lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                             lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
+                                             lambda img, seg: (DuplicateToScaledImageTransform(new_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE))(img), seg)])
         val_dataset = dataset['class'](dataset['path'],
                                        split='val',
                                        transforms=val_joint_transforms)
@@ -400,6 +401,9 @@ def _do_train_val(do_train, model, dataset_settings, device_obj, batch_size, sta
                 FATAL("SSSR feature transform network output contains 'NaN' values and so cannot continue.")
             assert not t.isnan(SISR_transform_output).any().item(),\
                 FATAL("SISR feature transform network output contains 'NaN' values and so cannot continue.")
+
+            # Resize output of SSSR layer to the same as 'target' size, if required
+            SSSR_output = F.interpolate(SSSR_output, size=target.shape[-2:], mode='nearest')
 
             CE_loss = t.nn.CrossEntropyLoss(ignore_index=dataset_settings.IGNORE_CLASS_LABEL)(SSSR_output, target)
             MSE_loss = (w1 * t.nn.MSELoss()(SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)

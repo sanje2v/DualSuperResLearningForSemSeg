@@ -5,9 +5,12 @@ class DuplicateToScaledImageTransform(t.nn.Module):
     """Duplcate a ``Tensor Image`` to a new tensor image of scaled size.
     """
 
-    def __init__(self, new_size):
+    def __init__(self, new_sizes):
+        assert isinstance(new_sizes, (tuple, list)), "BUG CHECK: 'new_sizes' must be a tuple or list."
+        assert len(new_sizes) == 2, "BUG CHECK: 'new_sizes' must be of length 2."
+
         super().__init__()
-        self.new_size = new_size
+        self.new_sizes = new_sizes
 
     def forward(self, pic_tensor):
         """
@@ -15,13 +18,10 @@ class DuplicateToScaledImageTransform(t.nn.Module):
             pic_tensor (Tensor Image): Image tensor to scale.
 
         Returns:
-            (Tensor, Tensor): (Scaled image tensor, Original image tensor).
+            (Tensor, ...): Tuple of resized image tensors sames as the number of 'new_sizes'.
         """
-        scaled_pic_tensor = t.unsqueeze(pic_tensor, dim=0)
-        scaled_pic_tensor = F.interpolate(scaled_pic_tensor, size=self.new_size, mode='bilinear', align_corners=True)
-        scaled_pic_tensor = t.squeeze(scaled_pic_tensor, dim=0)
-
-        return scaled_pic_tensor, pic_tensor
+        pic_tensor = t.unsqueeze(pic_tensor, dim=0)
+        return [t.squeeze(F.interpolate(pic_tensor, size=self.new_sizes[i], mode='bilinear', align_corners=True), dim=0) for i in range(len(self.new_sizes))]
 
     def __repr__(self):
         return self.__class__.__name__ + '()'

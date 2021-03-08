@@ -10,8 +10,8 @@ from .BaseModel import BaseModel
 
 class DSRL(BaseModel):
     STAGES = [1, 2, 3]
-    MODEL_INPUT_SIZE = (512, 1024)
-    MODEL_OUTPUT_SIZE = (1024, 2048)
+    MODEL_INPUT_SIZE = (256, 512)#(512, 1024)
+    MODEL_OUTPUT_SIZE = tuple(map(lambda x: x*2, MODEL_INPUT_SIZE))
 
     @staticmethod
     def _define_feature_extractor(in_channels:int, out_channels1:int, out_channels2:int):
