@@ -17,7 +17,6 @@ MIN_NUMPY_VERSION = version_tuple(major=1, minor=19)
 
 # PyTorch library
 DEFAULT_DTYPE = t.float32
-assert DEFAULT_DTYPE in [t.float16, t.float32], "BUG CHECK: settings.DEFAULT_DTYPE can only be either t.float16 or t.float32!"
 t.set_default_dtype(DEFAULT_DTYPE)
 # NOTE: Put all batch normalization class types here so that 'freeze batch normalization layer' can work properly
 BATCHNORM_MODULE_CLASSES = (t.nn.BatchNorm1d, t.nn.BatchNorm2d, t.nn.BatchNorm3d, t.nn.SyncBatchNorm, apex.parallel.SyncBatchNorm)
@@ -46,6 +45,7 @@ DEFAULT_LOSS_WEIGHTS = [0.1, 1.0]
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 PARAMS_FILE = 'params.txt'
+EXPERIMENTS_ROOT_DIR = 'experiments'
 WEIGHTS_ROOT_DIR = 'weights'
 WEIGHTS_DIR = os.path.join(WEIGHTS_ROOT_DIR, 'stage{stage}')
 FINAL_WEIGHTS_FILE  = 'final.weights'

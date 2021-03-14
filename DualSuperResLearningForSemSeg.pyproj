@@ -14,7 +14,7 @@
     <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 10 --description "Stage 1 training with 10 epochs" --batch-size 2 --num-workers 0 --device gpu --val-interval 1 --checkpoint-interval 1 --dataset cityscapes</CommandLineArguments>
+    <CommandLineArguments>train --stage 1 --epochs 1 --description "Stage 1 training with 10 epochs" --batch-size 3 --num-workers 8 --device gpu --val-interval 1 --checkpoint-interval 1 --dataset cityscapes</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
@@ -27,31 +27,31 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="commands\benchmark.py">
+    <Compile Include="command_handlers\benchmark.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\compile_model.py">
+    <Compile Include="command_handlers\compile_model.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\edit_checkpoint.py">
+    <Compile Include="command_handlers\edit_checkpoint.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\inspect_checkpoint.py">
+    <Compile Include="command_handlers\inspect_checkpoint.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\print_model.py">
+    <Compile Include="command_handlers\print_model.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\prune_weights.py">
+    <Compile Include="command_handlers\prune_weights.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\test.py">
+    <Compile Include="command_handlers\test.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\train_or_resume.py">
+    <Compile Include="command_handlers\train_or_resume.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="commands\__init__.py">
+    <Compile Include="command_handlers\__init__.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="consts.py">
@@ -94,13 +94,11 @@
     <Compile Include="models\modules\ASPP.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="models\modules\backbone\ResNet101.py" />
     <Compile Include="models\modules\backbone\__init__.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\modules\__init__.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="models\modules\backbone\ResNet101.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\schedulers\PolynomialLR.py">
@@ -136,7 +134,7 @@
     <Compile Include="models\transforms\JointRandomRotate.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="models\transforms\JointScaledImages.py">
+    <Compile Include="models\transforms\JointScaledImage.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="models\transforms\__init__.py">
@@ -176,7 +174,7 @@
     <Folder Include="models\schedulers\" />
     <Folder Include="models\transforms\" />
     <Folder Include="metrices\" />
-    <Folder Include="commands\" />
+    <Folder Include="command_handlers\" />
     <Folder Include="scripts\" />
     <Folder Include="outputs\" />
     <Folder Include="weights\" />

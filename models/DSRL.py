@@ -10,8 +10,8 @@ from .BaseModel import BaseModel
 
 class DSRL(BaseModel):
     STAGES = [1, 2, 3]
-    MODEL_INPUT_SIZE = (256, 512)#(512, 1024)
-    MODEL_OUTPUT_SIZE = tuple(map(lambda x: x*2, MODEL_INPUT_SIZE))
+    MODEL_INPUT_SIZE = (256, 512)#(512, 512)#(512, 1024)
+    MODEL_OUTPUT_SIZE = tuple(x*2 for x in MODEL_INPUT_SIZE)
 
     @staticmethod
     def _define_feature_extractor(in_channels:int, out_channels1:int, out_channels2:int):
@@ -19,7 +19,7 @@ class DSRL(BaseModel):
         {
             'backbone': ResNet101(replace_stride_with_dilation=[False, False, True]),
             'aspp': ASPP(in_channels=in_channels, out_channels=out_channels1, rate=1),
-            'upsample_sub': t.nn.Sequential(t.nn.Dropout(p=0.5),
+            'upsample_sub': t.nn.Sequential(t.nn.Dropout(p=0.2),
                                             t.nn.UpsamplingBilinear2d(scale_factor=4.0)),
             'shortcut_conv': t.nn.Sequential(t.nn.Conv2d(in_channels=out_channels1,
                                                          out_channels=out_channels2,
@@ -27,7 +27,7 @@ class DSRL(BaseModel):
                                                          padding=0,
                                                          bias=False),
                                              t.nn.BatchNorm2d(num_features=out_channels2),
-                                             t.nn.ReLU(inplace=True))
+                                             t.nn.ReLU())
         }
 
         return t.nn.ModuleDict(feature_extractor_modules)
@@ -42,21 +42,21 @@ class DSRL(BaseModel):
                                                     padding=1,
                                                     bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
-                                        t.nn.ReLU(inplace=True),
-                                        t.nn.Dropout(p=0.5),
+                                        t.nn.ReLU(),
+                                        t.nn.Dropout(p=0.2),
                                         t.nn.Conv2d(in_channels=mid_channels,
                                                     out_channels=mid_channels,
                                                     kernel_size=3,
                                                     padding=1,
                                                     bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
-                                        t.nn.ReLU(inplace=True),
+                                        t.nn.ReLU(),
                                         t.nn.Dropout(p=0.2)),
             'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1, bias=True),
             # NOTE: Replaced this 'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
             # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 8 times.
             'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(scale_factor=2.0),     # NOTE: To reduce parameters, we use upsamling here
-                                               t.nn.Dropout(p=0.5),
+                                               t.nn.Dropout(p=0.2),
                                                t.nn.ConvTranspose2d(in_channels=out_channels,
                                                                     out_channels=out_channels,
                                                                     kernel_size=2,
@@ -64,8 +64,8 @@ class DSRL(BaseModel):
                                                                     padding=0,
                                                                     bias=False),
                                                t.nn.BatchNorm2d(num_features=out_channels),
-                                               t.nn.ReLU(inplace=True),
-                                               t.nn.Dropout(p=0.5),
+                                               t.nn.ReLU(),
+                                               t.nn.Dropout(p=0.2),
                                                t.nn.ConvTranspose2d(in_channels=out_channels,
                                                                     out_channels=out_channels,
                                                                     kernel_size=2,
@@ -97,10 +97,10 @@ class DSRL(BaseModel):
                                            padding=0,
                                            bias=False),
                                t.nn.BatchNorm2d(num_features=out_channels),
-                               t.nn.ReLU(inplace=True))
+                               t.nn.ReLU())
 
 
-    def __init__(self, stage, dataset_settings):
+    def __init__(self, stage, dataset_settings, init_weights=True, BatchNorm2d=t.nn.BatchNorm2d):
         assert stage in [1, 2, 3], "BUG CHECK: Unsupported stage {0} specified in DSRL.__init__().".format(stage)
 
         # CAUTION: Don't forget to call super's constructor
@@ -120,11 +120,17 @@ class DSRL(BaseModel):
                                                       mid_channels=256,
                                                       out_channels=dataset_settings.NUM_CLASSES)
 
+        if init_weights:
+            self._init_weights(BatchNorm2d, self.feature_extractor['shortcut_conv'], self.SSSR_decoder)
+
         if self.stage > 1:
             # Single Image Super-Resolution (SISR)
             self.SISR_decoder = DSRL._define_SISR_decoder(in_channels=(256+48),
                                                           out_channels=consts.NUM_RGB_CHANNELS,
                                                           upscale_factor=8)   # CAUTION: 'upscale_factor' must be integer type
+
+            if init_weights:
+                self._init_weights(BatchNorm2d, self.SISR_decoder)
 
             if self.stage > 2:
                 # Feature transform module for SSSR
@@ -134,6 +140,19 @@ class DSRL(BaseModel):
                 # Feature transform module for SISR
                 self.SISR_feature_transformer = DSRL._define_feature_transformer(in_channels=consts.NUM_RGB_CHANNELS,
                                                                                  out_channels=1)
+
+                if init_weights:
+                    self._init_weights(BatchNorm2d, self.SSSR_feature_transformer, self.SISR_feature_transformer)
+
+
+    def _init_weights(self, BatchNorm2d, *modules):
+        for module in modules:
+            for m in module.modules():
+                if isinstance(m, (t.nn.Conv2d, t.nn.ConvTranspose2d)):
+                    t.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                elif isinstance(m, BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
 
 
     def initialize_with_pretrained_weights(self, weights_dir, map_location=t.device('cpu')):

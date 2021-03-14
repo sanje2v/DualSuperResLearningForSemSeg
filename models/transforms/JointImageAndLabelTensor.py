@@ -9,7 +9,7 @@ class JointImageAndLabelTensor(t.nn.Module):
     def _PILToClassLabelLongTensor(seg, label_mapping_dict):
         assert isinstance(seg, Image.Image), "BUG CHECK: 'seg' parameter must be a PIL image."
 
-        seg = np.array(seg, dtype=np.int64)
+        seg = np.array(seg)
         for key, value in label_mapping_dict.items():
             seg[seg == key] = value
 

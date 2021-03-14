@@ -40,4 +40,4 @@ class mIoU:
             self.miou.append(np.nanmean(area_inter / area_union))
 
     def __call__(self):
-        return np.nanmean(self.miou)    # CAUTION: We use 'nanmean' to ignore any Nan values
+        return (np.nanmean(self.miou) * 100.) if self.miou else 0.    # CAUTION: We use 'nanmean' to ignore any Nan values

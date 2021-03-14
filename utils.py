@@ -1,6 +1,5 @@
 import os
 import os.path
-import apex
 import argparse
 import inspect
 import platform
@@ -179,16 +178,15 @@ def isInvalidFilename(filename):
             return True
     return False
 
-
 def getFilesWithExtension(dir, extension_or_tuple, with_path=False):
     if not type(extension_or_tuple) is tuple:
         extension_or_tuple = (extension_or_tuple,)
     extension_or_tuple = tuple(x.casefold() for x in extension_or_tuple)
     return [(os.path.join(dir, f) if with_path else f) for f in os.listdir(dir) if f.casefold().endswith(extension_or_tuple)]
 
-
 def hasExtension(filename, extension):
     return os.path.splitext(filename)[-1].casefold() == extension.casefold()
+
 
 def prevent_system_sleep():
     # NOTE: This function only supports disabling system sleep (until process ends function) on Windows OS.
@@ -250,9 +248,11 @@ def save_checkpoint(dir, filename, **checkpoint_vars):
     os.makedirs(dir, exist_ok=True)
     t.save(checkpoint_vars, os.path.join(dir, filename))
 
-def save_weights(dir, filename, model_state_dict, mixed_precision):
+def save_weights(dir, filename, model_state_dict, mixed_precision, amp_state_dict=None):
     os.makedirs(dir, exist_ok=True)
-    t.save({'model_state_dict': model_state_dict, 'mixed_precision': mixed_precision, 'amp_state_dict': apex.amp.state_dict() if mixed_precision else None},
+    if mixed_precision and amp_state_dict is None:
+        amp_state_dict = apex.amp.state_dict()
+    t.save({'model_state_dict': model_state_dict, 'mixed_precision': mixed_precision, 'amp_state_dict': amp_state_dict},
            os.path.join(dir, filename))
 
 def make_input_output_visualization(input_image, output_map, class_rgb_color, blend_factor=0.4):

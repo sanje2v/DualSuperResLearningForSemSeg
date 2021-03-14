@@ -6,17 +6,14 @@ import torchvision as tv
 class ResNet101(t.nn.Module):
     PRETRAINED_WEIGHTS_URL = "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth"
 
-    def __init__(self, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None):
+    def __init__(self, groups=1, width_per_group=64, replace_stride_with_dilation=None,
+                 init_weights=True, BatchNorm2d=t.nn.BatchNorm2d):
         super(ResNet101, self).__init__()
 
         block = tv.models.resnet.Bottleneck # CAUTION: Export hidden by module's '__ALL__' but still is importable
         layers = [3, 4, 23, 3]
 
-        if norm_layer is None:
-            norm_layer = t.nn.BatchNorm2d
-        self._norm_layer = norm_layer
+        self._norm_layer = BatchNorm2d
 
         self.inplanes = 64
         self.dilation = 1
@@ -30,7 +27,7 @@ class ResNet101(t.nn.Module):
         self.base_width = width_per_group
         self.conv1 = t.nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
                                  bias=False)
-        self.bn1 = norm_layer(self.inplanes)
+        self.bn1 = BatchNorm2d(self.inplanes)
         self.relu = t.nn.ReLU(inplace=True)
         self.maxpool = t.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -41,22 +38,22 @@ class ResNet101(t.nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
 
+        if init_weights:
+            self._init_weights(BatchNorm2d)
+
+
+    def _init_weights(self, BatchNorm2d):
         for m in self.modules():
             if isinstance(m, t.nn.Conv2d):
                 t.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, (t.nn.BatchNorm2d, t.nn.GroupNorm)):
-                t.nn.init.constant_(m.weight, 1)
-                t.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, tv.models.resnet.Bottleneck):
+                t.nn.init.constant_(m.bn3.weight, 0)
+            elif isinstance(m, tv.models.resnet.BasicBlock):
+                t.nn.init.constant_(m.bn2.weight, 0)
 
-        # Zero-initialize the last BN in each residual branch,
-        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
-        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
-        if zero_init_residual:
-            for m in self.modules():
-                if isinstance(m, tv.models.Bottleneck):
-                    t.nn.init.constant_(m.bn3.weight, 0)
-                elif isinstance(m, tv.models.BasicBlock):
-                    t.nn.init.constant_(m.bn2.weight, 0)
 
     def initialize_with_pretrained_weights(self, weights_dir, map_location):
         pretrained_state_dict = t.utils.model_zoo.load_url(self.PRETRAINED_WEIGHTS_URL,

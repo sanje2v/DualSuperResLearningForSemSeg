@@ -9,7 +9,7 @@ import torch as t
 import torchvision as tv
 
 from models import DSRL
-import commands
+import command_handlers
 from utils import *
 import settings
 
@@ -74,12 +74,12 @@ def main(args):
     # According to 'args.command' call functions in 'commands' module
     if args['command'] in ['train', 'resume-train']:
         args['is_resuming_training'] = (args['command'] == 'resume-train')
-        commands.train_or_resume(**args)
+        command_handlers.train_or_resume(**args)
     else:
         # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
         #   Hence, the following 'replace()' is required.
-        command_func_to_call = getattr(commands, args['command'].replace('-', '_'), None)
-        assert command_func_to_call, "BUG CHECK: Command '{:s}' does not have any implementation under 'commands' package.".format(args['command'])
+        command_func_to_call = getattr(command_handlers, args['command'].replace('-', '_'), None)
+        assert command_func_to_call, "BUG CHECK: Command '{:s}' does not have any implementation under 'command_handlers' package.".format(args['command'])
         command_func_to_call(**args)
 
 
@@ -122,13 +122,14 @@ if __name__ == '__main__':
         train_parser.add_argument('--momentum', type=float, default=settings.DEFAULT_MOMENTUM, help="Momentum value for SGD")
         train_parser.add_argument('--weights-decay', type=float, default=settings.DEFAULT_WEIGHTS_DECAY, help="Weights decay for SGD")
         train_parser.add_argument('--poly-power', type=float, default=settings.DEFAULT_POLY_POWER, help="Power for poly learning rate strategy")
-        train_parser.add_argument('--stage', type=int, choices=DSRL.STAGES, required=True, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
+        train_parser.add_argument('--stage', required=True, type=int, choices=DSRL.STAGES, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[0], help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[1], help="Weight for FA loss")
         train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
-        train_parser.add_argument('--experiment_id', type=str, default='', help="Experiment ID which is used to create a root directory for weights and logs directories")
+        train_parser.add_argument('--experiment-id', type=str, default='', help="Experiment ID which is used to create a root directory for weights and logs directories")
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
         train_parser.add_argument('--early-stopping', action='store_true', help="Automatically stop training when training error is less than validation error")
+        train_parser.add_argument('--dry-run', action='store_true', help="Disable actual training and validation code used to debug boilerplate code around them")
 
         # Resume training from checkpoint arguments
         resume_train_parser = command_parser.add_parser('resume-train', help="Resume training model from checkpoint file")
@@ -149,15 +150,21 @@ if __name__ == '__main__':
         test_parser.add_argument('--profile', action='store_true', help="Enable PyTorch profiling of execution times and memory usage")
         test_parser.add_argument('--compiled-model', action='store_true', help="Using compiled model in '--weights' made using 'compile-model' command")
 
+        # Purge weights and logs
+        purge_weights_logs = command_parser.add_parser('purge-weights-logs', help="Delete all training weights and logs")
+        purge_weights_logs_type = purge_weights_logs.add_mutually_exclusive_group(required=True)
+        purge_weights_logs_type.add_argument('--stage', type=int, choices=DSRL.STAGES, help="Stage for which to delete weights and logs")
+        purge_weights_logs_type.add_argument('--all', action='store_true', help="Delete weights and logs for all stages")
+
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
-        print_model_parser.add_argument('--stage', type=int, choices=DSRL.STAGES, help="Stage to print layers of model for")
+        print_model_parser.add_argument('--stage', required=True, type=int, choices=DSRL.STAGES, help="Stage to print layers of model for")
         print_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Purne weights arguments
         purne_weights_parser = command_parser.add_parser('purne-weights', help="Removes all weights from a weights file which are not needed for inference")
-        purne_weights_parser.add_argument('--src-weights', type=str, required=True, help="Checkpoint/Weights file to prune")
-        purne_weights_parser.add_argument('--dest-weights', type=str, required=True, help="New weights file to write to")
+        purne_weights_parser.add_argument('--src-weights', required=True, type=str, help="Checkpoint/Weights file to prune")
+        purne_weights_parser.add_argument('--dest-weights', required=True, type=str, help="New weights file to write to")
         purne_weights_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Inspect checkpoint arguments
@@ -173,7 +180,7 @@ if __name__ == '__main__':
 
         # Benchmark arguments
         benchmark_parser = command_parser.add_parser('benchmark', help="Benchmarks model weights to produce metric results")
-        benchmark_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
+        benchmark_parser.add_argument('--weights', required=True, type=str, help="Weights to use")
         benchmark_parser.add_argument('--dataset', required=True, nargs=2, metavar=('DATASET', 'SPLIT'), action=ValidateDatasetNameAndSplit, const=settings.DATASETS, help="Dataset and split to operate on")
         benchmark_parser.add_argument('--device', default=settings.DEFAULT_DEVICE, type=str.casefold, choices=settings.SUPPORTED_DEVICES, help="Device to create model in, cpu/gpu")
         benchmark_parser.add_argument('--disable-cudnn-benchmark', action='store_true', help="Disable CUDNN benchmark mode which might make training slower")
@@ -182,8 +189,8 @@ if __name__ == '__main__':
 
         # Compile model arguments
         compile_model_parser = command_parser.add_parser('compile-model', help="Compiles given model using TorchScript and outputs a compiled file")
-        compile_model_parser.add_argument('--weights', type=str, required=True, help="Weights to use")
-        compile_model_parser.add_argument('--output-file', type=str, required=True, help="Output file to compile the model to")
+        compile_model_parser.add_argument('--weights', required=True, type=str, help="Weights to use")
+        compile_model_parser.add_argument('--output-file', required=True, type=str, help="Output file to compile the model to")
         compile_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
 
@@ -245,10 +252,11 @@ if __name__ == '__main__':
                 raise argparse.ArgumentTypeError("'--poly-power' should be greater than 0!")
 
             if args.experiment_id:
-                if isInvalidFilename(args.experiment):
+                if isInvalidFilename(args.experiment_id):
                     raise argparse.ArgumentTypeError("'--experiment-id' must not contain invalid filename characters ({:s})!".format(', '.join(INVALID_FILENAME_CHARS)))
 
-                if os.path.isdir(args.experiment):
+                args.experiment_id = os.path.join(settings.EXPERIMENTS_ROOT_DIR, args.experiment_id)
+                if os.path.isdir(args.experiment_id):
                     raise argparse.ArgumentTypeError("'--experiment-id' already exists and overwriting experiment directory is not supported!")
 
             # Warning if there are already weights for this stage
@@ -285,6 +293,22 @@ if __name__ == '__main__':
 
             if not isCUDAdevice(args.device) and args.disable_cudnn_benchmark:
                 raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
+
+        elif args.command == 'purge-weights-logs':
+            answer = input('This will delete {:s} logs and weights. Continue? (y/n) '.format('all' if args.all else 'stage {:d}'.format(args.stage)))
+            if answer.casefold() == 'y':
+                purge_start_stage = DSRL.STAGES[0] if args.all else args.stage
+                purge_stop_stage = DSRL.STAGES[-1] if args.all else args.stage
+
+                for stage in range(purge_start_stage, purge_stop_stage+1):
+                    logs_dir = settings.LOGS_DIR.format(stage=stage, mode='')
+                    weights_dir = settings.WEIGHTS_DIR.format(stage=stage)
+
+                    for dir in [logs_dir, weights_dir]:
+                        if os.path.isdir(dir):
+                            shutil.rmtree(dir)
+
+            exit(0)
 
         elif args.command == 'purne-weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):

@@ -20,4 +20,4 @@ class Accuracy:
         self.mean_accuracy.append(pixels_correct / total_pixels)
 
     def __call__(self):
-        return np.mean(self.mean_accuracy)    # CAUTION: We use 'nanmean' to ignore any Nan values
+        return (np.mean(self.mean_accuracy) * 100.) if self.mean_accuracy else 0.    # CAUTION: We use 'nanmean' to ignore any Nan values

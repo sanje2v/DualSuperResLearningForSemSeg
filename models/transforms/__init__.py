@@ -7,4 +7,4 @@ from .JointHFlip import JointHFlip
 from .JointRandomGaussianBlur import JointRandomGaussianBlur
 from .JointRandomGrayscale import JointRandomGrayscale
 from .JointNormalize import JointNormalize
-from .JointScaledImages import JointScaledImages
+from .JointScaledImage import JointScaledImage
