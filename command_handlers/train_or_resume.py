@@ -219,7 +219,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
         for epoch in range((starting_epoch + 1), (epochs + 1)):
             if is_master_rank:
-                log_string = "\n=> EPOCH {0:d}/{1:d}".format(epoch, epochs)
+                log_string = "\n=> EPOCH {0:d}/{1:d}".format(epoch, epochs) + "\nLearning Rate: {:6f}".format(scheduler.get_last_lr()[0])
                 print(log_string)
 
                 training_epoch_begin_timestamp = datetime.now()
@@ -509,13 +509,11 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                     log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
                 log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
 
-            if do_train:
-                log_string.append("Learning Rate: {:6f}".format(scheduler.get_last_lr()[0]))
-            else:
+            if not do_train:
                 log_string.append("Accuracy %: {:.2f}".format(accuracy()))
                 log_string.append("mIoU %: {:.2f}".format(miou()))
-                log_string.append("Best mIoU % so far is {:.2f} at epoch {:d}.".format(max(miou(), best_validation_dict['best_miou_percent']),
-                                                                                       epoch if miou() > best_validation_dict['best_miou_percent'] else best_validation_dict['epoch']))
+                log_string.append("Best mIoU % yet is {:.2f} at epoch {:d}.".format(max(miou(), best_validation_dict['best_miou_percent']),
+                                                                                    epoch if miou() > best_validation_dict['best_miou_percent'] else best_validation_dict['epoch']))
 
             log_string = ', '.join(log_string)
             if do_train:
