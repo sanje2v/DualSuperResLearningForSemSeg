@@ -130,7 +130,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                                            JointRandomGaussianBlur(kernel_size=3, p=0.5),
                                            JointRandomGrayscale(p=0.1),
                                            JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
-                                           JointScaledImage(new_img_size=DSRL.MODEL_INPUT_SIZE, new_seg_size=DSRL.MODEL_OUTPUT_SIZE)])
+                                           JointScaledImage(new_img_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE), new_seg_size=DSRL.MODEL_OUTPUT_SIZE)])
     train_dataset = dataset['class'](dataset['path'],
                                      split='train',
                                      transforms=train_joint_transforms)
@@ -427,14 +427,6 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                 FATAL("SSSR feature transform network output contains 'NaN' values and so cannot continue.")
             assert not t.isnan(SISR_transform_output).any().item(),\
                 FATAL("SISR feature transform network output contains 'NaN' values and so cannot continue.")
-
-            # Resize output of SSSR layer to the same size as 'target', if required
-            #if SSSR_output.shape[-2:] != target.shape[-2:]:
-            #    SSSR_output = F.interpolate(SSSR_output, size=target.shape[-2:], mode='nearest')
-
-            # Resize output of SISR layer to the same size as 'input_org', if required
-            if stage > 1 and SISR_output.shape[-2:] != input_org[-2:]:
-                SISR_output = F.interpolate(SISR_output, size=input_org.shape[-2:], mode='bilinear', align_corners=True)
 
             CE_loss = loss_funcs[0](SSSR_output, target.long())
             MSE_loss = (w1 * loss_funcs[1](SISR_output, input_org)) if stage > 1 else t.tensor(0., requires_grad=False)
