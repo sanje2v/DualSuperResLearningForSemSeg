@@ -239,6 +239,9 @@ def parse_cmdline_and_invoke_main(args):
                 if not os.path.isfile(args.init_weights):
                    raise argparse.ArgumentTypeError("Couldn't find initial weights file '{0:s}'!".format(args.init_weights))
 
+                # CAUTION: Some functions might fail for relative paths so we convert them to absolute path
+                args.init_weights = os.path.abspath(args.init_weights)
+
             if not args.batch_size > 0:
                 raise argparse.ArgumentTypeError("'--batch-size' should be greater than 0!")
 
@@ -266,11 +269,11 @@ def parse_cmdline_and_invoke_main(args):
                     raise argparse.ArgumentTypeError("'--experiment-id' already exists and overwriting experiment directory is not supported!")
 
             # Warning if there are already weights for this stage
-            if os.path.isfile(os.path.join(settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
+            if os.path.isfile(os.path.join(args.experiment_id, settings.WEIGHTS_DIR.format(stage=args.stage), settings.FINAL_WEIGHTS_FILE)):
                 answer = input(CAUTION("Weights file for this stage already exists. Training will delete the current weights and logs. Continue? (y/n) ")).casefold()
                 if answer == 'y':
-                    shutil.rmtree(settings.LOGS_DIR.format(stage=args.stage, mode=''), ignore_errors=True)
-                    shutil.rmtree(settings.WEIGHTS_DIR.format(stage=args.stage))
+                    shutil.rmtree(os.path.join(args.experiment_id, settings.LOGS_DIR.format(stage=args.stage, mode='')), ignore_errors=True)
+                    shutil.rmtree(os.path.join(args.experiment_id, settings.WEIGHTS_DIR.format(stage=args.stage)))
                 else:
                     sys.exit(0)
 

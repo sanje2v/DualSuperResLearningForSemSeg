@@ -344,7 +344,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
             # Calculate new learning rate for next epoch
             scheduler.step()
 
-            if is_master_rank:
+            if is_master_rank and epoch < epochs:
                 # Print estimated time for training completion
                 training_epoch_timetaken_list.append((datetime.now() - training_epoch_begin_timestamp).total_seconds())
                 training_epoch_avg_timetaken = np.mean(training_epoch_timetaken_list[(-val_interval*2):])   # NOTE: '*2' due to Nyquist sampling theorem

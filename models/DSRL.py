@@ -49,7 +49,7 @@ class DSRL(BaseModel):
                                                     bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
                                         t.nn.ReLU(),
-                                        t.nn.Dropout(p=0.4)),
+                                        t.nn.Dropout(p=0.2)),
             'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1, bias=True),
             # NOTE: Replaced this 'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
             # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 8 times.
