@@ -261,10 +261,11 @@ def make_input_output_visualization(input_image, output_map, class_rgb_color, bl
     assert blend_factor > 0.0 and blend_factor < 1.0
 
     input_image = input_image.astype(np.uint8)
+    output_map = output_map.astype(input_image.dtype)
     output_image = np.empty_like(input_image)
     overlayed_image = np.empty_like(output_image)
-    class_rgb_color = dict((key, convertListToNumbaList(class_rgb_color[key], nb.from_dtype(input_image.dtype))) for key, value in class_rgb_color.items())
-    class_rgb_color = convertDictToNumbaDict(class_rgb_color, nb.intp, nb.types.ListType(nb.from_dtype(input_image.dtype)))
+    class_rgb_color = dict((key, convertListToNumbaList(class_rgb_color[key], nb.intp)) for key, value in class_rgb_color.items())
+    class_rgb_color = convertDictToNumbaDict(class_rgb_color, nb.intp, nb.types.ListType(nb.intp))
 
     @nb.jit(nopython=True, parallel=True, cache=True, inline='always')
     def _acceleratedTasks(input_image, output_image, output_map, overlayed_image, blend_factor, class_rgb_color, dtype):
