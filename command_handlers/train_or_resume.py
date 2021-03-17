@@ -151,7 +151,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
     if is_master_rank:
         val_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
                                              JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
-                                             JointScaledImage(new_img_size=DSRL.MODEL_INPUT_SIZE, new_seg_size=DSRL.MODEL_OUTPUT_SIZE)])
+                                             JointScaledImage(new_img_sizes=(DSRL.MODEL_INPUT_SIZE, DSRL.MODEL_OUTPUT_SIZE), new_seg_size=DSRL.MODEL_OUTPUT_SIZE)])
         val_dataset = dataset['class'](dataset['path'],
                                        split='val',
                                        transforms=val_joint_transforms)
