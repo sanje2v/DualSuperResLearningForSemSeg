@@ -1,0 +1,13 @@
+{
+    "device": "gpu",
+    "num-workers": 12,
+    "dataset": "cityscapes",
+    "val-interval": 1,
+    "checkpoint-interval": 5,
+    "batch-size": 8,
+    "epochs": 60,
+    "learning-rate": 0.005,
+    "end-learning-rate": 0.0008,
+    "stage": 1,
+    "description": "Testing stage 1 with lower learning rate"
+}

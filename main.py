@@ -2,7 +2,9 @@ import sys
 import os
 import os.path
 import shutil
+import functools
 import argparse
+import multiprocessing
 import json
 import numpy as np
 import torch as t
@@ -84,7 +86,7 @@ def main(args):
 
 
 
-if __name__ == '__main__':
+def parse_cmdline_and_invoke_main(args):
     assert check_version(sys.version_info, *settings.MIN_PYTHON_VERSION), \
         FATAL("This program needs at least Python {0:d}.{1:d} interpreter.".format(*settings.MIN_PYTHON_VERSION))
     assert check_version(t.__version__, *settings.MIN_PYTORCH_VERSION), \
@@ -130,6 +132,10 @@ if __name__ == '__main__':
         train_parser.add_argument('--description', type=str, default=None, help="Description of experiment to be saved in 'params.txt' with given commandline parameters")
         train_parser.add_argument('--early-stopping', action='store_true', help="Automatically stop training when training error is less than validation error")
         train_parser.add_argument('--dry-run', action='store_true', help="Disable actual training and validation code used to debug boilerplate code around them")
+
+        # Training with configuration from JSON file
+        config_train_parser = command_parser.add_parser('config-train', help="JSON configuration file that provides commandline parameters for training")
+        config_train_parser.add_argument('--file', required=True, type=str, help="Path to JSON configuration file")
 
         # Resume training from checkpoint arguments
         resume_train_parser = command_parser.add_parser('resume-train', help="Resume training model from checkpoint file")
@@ -195,7 +201,7 @@ if __name__ == '__main__':
 
 
         # Validate arguments according to mode
-        args = parser.parse_args()
+        args = parser.parse_args(args)
         if args.command == 'train':
             if args.distributed:
                 if not t.distributed.is_available():
@@ -268,6 +274,34 @@ if __name__ == '__main__':
                 else:
                     sys.exit(0)
 
+        elif args.command == 'config-train':
+            if not os.path.isfile(args.file):
+                raise argparse.ArgumentTypeError("File specified in '--file' parameter doesn't exists!")
+
+            # Load configuration file, spawn a separate process with commandline parameters in this file and wait for child process to exit
+            try:
+                def correct_JSON_parse_hook(pairs):
+                    # Prepend a '--' as required for subcommand and convert its arguments to string
+                    return {('--' + c): str(a) for c, a in pairs}
+
+                with open(args.file, 'r') as train_config_file:
+                    train_config_dict = json.load(train_config_file, object_pairs_hook=correct_JSON_parse_hook)
+
+                # Create list of commandline args to send to child process
+                train_process_args = ['train', *functools.reduce(lambda k, v: k + v, train_config_dict.items())]
+                train_process = multiprocessing.Process(target=parse_cmdline_and_invoke_main,
+                                                        args=(train_process_args,))
+                train_process.start()
+                train_process.join()
+                sys.exit(train_process.exitcode)
+
+            except json.JSONDecodeError as ex:
+                raise argparse.ArgumentTypeError("Parsing configuration JSON file raised exception: {:}".format(str(ex)))
+                sys.exit(-1)
+
+            except KeyboardInterrupt:
+                sys.exit(0)
+
         elif args.command == 'resume-train':
             if not hasExtension(args.checkpoint, '.checkpoint'):
                 raise argparse.ArgumentTypeError("Please specify a '.checkpoint' file as the whole model and optimizer states needs to be loaded!")
@@ -307,8 +341,7 @@ if __name__ == '__main__':
                     for dir in [logs_dir, weights_dir]:
                         if os.path.isdir(dir):
                             shutil.rmtree(dir)
-
-            exit(0)
+            sys.exit(0)
 
         elif args.command == 'purne-weights':
             if not any(hasExtension(args.src_weights, x) for x in ['.checkpoint', '.weights']):
@@ -390,3 +423,7 @@ if __name__ == '__main__':
 
         if t.distributed.is_initialized():
             t.distributed.destroy_process_group()
+
+
+if __name__ == '__main__':
+    parse_cmdline_and_invoke_main(sys.argv[1:])

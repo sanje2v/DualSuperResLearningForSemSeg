@@ -11,7 +11,7 @@ from .BaseModel import BaseModel
 class DSRL(BaseModel):
     STAGES = [1, 2, 3]
     MODEL_INPUT_SIZE = (256, 512)#(512, 512)#(512, 1024)
-    MODEL_OUTPUT_SIZE = tuple(x*2 for x in MODEL_INPUT_SIZE)
+    MODEL_OUTPUT_SIZE = tuple(x*1 for x in MODEL_INPUT_SIZE)
 
     @staticmethod
     def _define_feature_extractor(in_channels:int, out_channels1:int, out_channels2:int):
@@ -19,8 +19,6 @@ class DSRL(BaseModel):
         {
             'backbone': ResNet101(replace_stride_with_dilation=[False, False, True]),
             'aspp': ASPP(in_channels=in_channels, out_channels=out_channels1, rate=1),
-            'upsample_sub': t.nn.Sequential(t.nn.Dropout(p=0.2),
-                                            t.nn.UpsamplingBilinear2d(scale_factor=4.0)),
             'shortcut_conv': t.nn.Sequential(t.nn.Conv2d(in_channels=out_channels1,
                                                          out_channels=out_channels2,
                                                          kernel_size=1,
@@ -51,27 +49,28 @@ class DSRL(BaseModel):
                                                     bias=False),
                                         t.nn.BatchNorm2d(num_features=mid_channels),
                                         t.nn.ReLU(),
-                                        t.nn.Dropout(p=0.2)),
+                                        t.nn.Dropout(p=0.4)),
             'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1, bias=True),
             # NOTE: Replaced this 'upsample4': t.nn.UpsamplingBilinear2d(scale_factor=4),
             # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 8 times.
-            'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(scale_factor=2.0),     # NOTE: To reduce parameters, we use upsamling here
-                                               t.nn.Dropout(p=0.2),
-                                               t.nn.ConvTranspose2d(in_channels=out_channels,
-                                                                    out_channels=out_channels,
-                                                                    kernel_size=2,
-                                                                    stride=2,
-                                                                    padding=0,
-                                                                    bias=False),
-                                               t.nn.BatchNorm2d(num_features=out_channels),
-                                               t.nn.ReLU(),
-                                               t.nn.Dropout(p=0.2),
-                                               t.nn.ConvTranspose2d(in_channels=out_channels,
-                                                                    out_channels=out_channels,
-                                                                    kernel_size=2,
-                                                                    stride=2,
-                                                                    padding=0,
-                                                                    bias=True))
+            'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(size=DSRL.MODEL_OUTPUT_SIZE))
+                                               #t.nn.UpsamplingBilinear2d(scale=2.0),     # NOTE: To reduce parameters, we use upsamling here
+                                               #t.nn.Dropout(p=0.2),
+                                               #t.nn.ConvTranspose2d(in_channels=out_channels,
+                                               #                     out_channels=out_channels,
+                                               #                     kernel_size=2,
+                                               #                     stride=2,
+                                               #                     padding=0,
+                                               #                     bias=False),
+                                               #t.nn.BatchNorm2d(num_features=out_channels),
+                                               #t.nn.ReLU(),
+                                               #t.nn.Dropout(p=0.2),
+                                               #t.nn.ConvTranspose2d(in_channels=out_channels,
+                                               #                     out_channels=out_channels,
+                                               #                     kernel_size=2,
+                                               #                     stride=2,
+                                               #                     padding=0,
+                                               #                     bias=True))
         }
 
         return t.nn.ModuleDict(decoder_modules)
@@ -164,7 +163,7 @@ class DSRL(BaseModel):
             # Extract features
             backbone_features, lowlevel_features = self.feature_extractor['backbone'](x)    # NOTE: Output size (B, 2048, 32, 64), (B, 256, 128, 256)
             aspp_features = self.feature_extractor['aspp'](backbone_features)               # NOTE: Output size (B, 256, 32, 64)
-            aspp_features = self.feature_extractor['upsample_sub'](aspp_features)           # NOTE: Output size (B, 256, 128, 256)
+            aspp_features = t.nn.UpsamplingBilinear2d(scale_factor=4.0)(aspp_features)      # NOTE: Output size (B, 256, 128, 256)
             lowlevel_features = self.feature_extractor['shortcut_conv'](lowlevel_features)  # NOTE: Output size (B, 48, 128, 256)
             cat_features = t.cat([aspp_features, lowlevel_features], dim=1)                 # NOTE: Output size (B, 304, 128, 256)
 

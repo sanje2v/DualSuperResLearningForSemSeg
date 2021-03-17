@@ -154,14 +154,14 @@ class ValidateDistributedTrainingOptions(argparse.Action):
         setattr(namespace, self.dest, [master_addr, master_port, nodes, devices_per_node, backend, init_method, node_id])
 
 
-def INFO(text):
-    return termcolor.colored("INFO: {:}".format(text), 'green')
+def INFO(text, prefix=''):
+    return termcolor.colored("{0:}INFO: {1:}".format(prefix, text), 'green')
 
-def CAUTION(text):
-    return termcolor.colored("CAUTION: {:}".format(text), 'yellow')
+def CAUTION(text, prefix=''):
+    return termcolor.colored("{0:}CAUTION: {1:}".format(prefix, text), 'yellow')
 
-def FATAL(text):
-    return termcolor.colored("FATAL: {:}".format(text), 'red', attrs=['reverse', 'blink'])
+def FATAL(text, prefix=''):
+    return termcolor.colored("{0:}FATAL: {1:}".format(prefix, text), 'red', attrs=['reverse', 'blink'])
 
 
 def check_version(version, major, minor):

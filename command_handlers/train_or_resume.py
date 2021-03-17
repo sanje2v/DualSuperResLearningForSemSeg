@@ -1,6 +1,7 @@
 import gc
 import os
 import os.path
+import glob
 import termcolor
 import numpy as np
 import apex
@@ -22,7 +23,7 @@ import settings
 
 def train_or_resume(is_resuming_training, device, distributed, mixed_precision, disable_cudnn_benchmark, num_workers, dataset, val_interval,
                     checkpoint_interval, checkpoint_history, init_weights, batch_size, epochs, learning_rate, end_learning_rate, momentum,
-                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, dry_run, **other_args):
+                    weights_decay, poly_power, stage, w1, w2, freeze_batch_norm, experiment_id, description, early_stopping, dry_run=False, **other_args):
     if distributed:
         # CAUTION: Setting manual seed for 'torch' library is important when executing distributed
         #          training as we need to make sure all weights of the model are initialized to the
@@ -204,10 +205,12 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
             # Start training and then validation after specific intervals
             # Print number of training parameters
-            print(INFO("Total training parameters: {:,}".format(countModelParams(model)[0])))
+            countModelTrainingParams = countModelParams(model)[0]
+            print(INFO("Total training parameters: {:,}".format(countModelTrainingParams)))
+            train_logger.add_text("INFO", "Total training parameters: {:,}".format(countModelTrainingParams), (starting_epoch + 1))
             train_logger.add_text("INFO", "Training started on {:s}.".format(process_start_timestamp.strftime("%c")), (starting_epoch + 1))
-            log_string = "################################# Stage {:d} training STARTED #################################".format(stage)
-            print('\n' + INFO(log_string))
+            log_string = "################################# Stage {:d} training STARTED #################################\n".format(stage)
+            print(INFO(log_string, prefix='\n'))
 
             training_epoch_timetaken_list = []
 
@@ -219,7 +222,10 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
         for epoch in range((starting_epoch + 1), (epochs + 1)):
             if is_master_rank:
-                log_string = "\n=> EPOCH {0:d}/{1:d}".format(epoch, epochs) + "\nLearning Rate: {:6f}".format(scheduler.get_last_lr()[0])
+                log_string = []
+                log_string.append("\n=> EPOCH {0:d}/{1:d}".format(epoch, epochs))
+                log_string.append("\nLearning Rate: {:6f}".format(scheduler.get_last_lr()[0]))
+                log_string = ''.join(log_string)
                 print(log_string)
 
                 training_epoch_begin_timestamp = datetime.now()
@@ -316,17 +322,24 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                         checkpoint_variables_dict = {}
                         for var in settings.VARIABLES_IN_CHECKPOINT:
                             checkpoint_variables_dict[var] = locals()[var]
+                        # NOTE: Remove old best validation file before creating a new one
+                        for x in glob.glob(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage), "*_bestval.checkpoint"), recursive=False):
+                            if os.path.isfile(x):
+                                os.remove(x)
                         save_checkpoint(os.path.join(experiment_id, settings.CHECKPOINTS_DIR.format(stage=stage)),
-                                        settings.CHECKPOINT_FILE.format(epoch='_bestval'),
+                                        settings.CHECKPOINT_FILE.format(epoch='{:d}_bestval'.format(epoch)),
                                         **checkpoint_variables_dict)
 
                     # If early stopping is enabled, check if average training error is less than average
                     # validation error, and if so, stop training
-                    if early_stopping and Avg_train_loss.avg < Avg_val_loss.avg:
-                        log_string = "Early stopping was triggered at epoch {:d}.".format(epoch)
-                        train_logger.add_text("INFO", log_string, epoch)
-                        print(INFO(log_string))
-                        break
+                    if Avg_train_loss < Avg_val_loss:
+                        if early_stopping:
+                            log_string = "Early stopping was triggered at epoch {:d}.".format(epoch)
+                            train_logger.add_text("INFO", log_string, epoch)
+                            print(INFO(log_string))
+                            break
+                        else:
+                            print(CAUTION("Average training loss < Average validation loss!"))
 
             # Calculate new learning rate for next epoch
             scheduler.step()
@@ -350,7 +363,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                                                                                                process_end_timestamp.strftime("%c")),
                                   epochs)
             log_string = "################################# Stage {:d} training ENDED #################################".format(stage)
-            print('\n' + INFO(log_string))
+            print(INFO(log_string, prefix='\n'))
 
 
 def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_size, stage, data_loader, loss_funcs, w1, w2, is_master_rank,
@@ -365,10 +378,10 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                 module.eval()
 
     # Losses to report
-    CE_avg_loss = AverageMeter('CE Avg. Loss')
-    MSE_avg_loss = AverageMeter('MSE Avg. Loss')
-    FA_avg_loss = AverageMeter('FA Avg. Loss')
-    Avg_loss = AverageMeter('Avg. Loss')
+    CE_avg_loss = AverageMeter()
+    MSE_avg_loss = AverageMeter()
+    FA_avg_loss = AverageMeter()
+    Avg_loss = AverageMeter()
     miou = mIoU(num_classes=dataset_settings.NUM_CLASSES)
     accuracy = Accuracy()
 
@@ -453,12 +466,12 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
             if is_master_rank:
                 # Add loss information to progress bar
                 log_string = []
-                log_string.append("CE: {:.4f}".format(CE_avg_loss.avg))
+                log_string.append("CE: {:.4f}".format(CE_avg_loss()))
                 if stage > 1:
-                    log_string.append("MSE: {:.4f}".format(MSE_avg_loss.avg))
+                    log_string.append("MSE: {:.4f}".format(MSE_avg_loss()))
                     if stage > 2:
-                        log_string.append("FA: {:.4f}".format(FA_avg_loss.avg))
-                    log_string.append("Total: {:.3f}".format(Avg_loss.avg))
+                        log_string.append("FA: {:.4f}".format(FA_avg_loss()))
+                    log_string.append("Total: {:.3f}".format(Avg_loss()))
                 log_string = ', '.join(log_string)
                 progressbar.set_postfix_str("[{:s}]".format(log_string))
                 progressbar.update()
@@ -486,12 +499,12 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
 
         if is_master_rank:
             # Log training losses for this epoch to TensorBoard
-            logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_avg_loss.avg, epoch)
+            logger.add_scalar("Stage {:d}/CE Loss".format(stage), CE_avg_loss(), epoch)
             if stage > 1:
-                logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_avg_loss.avg, epoch)
+                logger.add_scalar("Stage {:d}/MSE Loss".format(stage), MSE_avg_loss(), epoch)
                 if stage > 2:
-                    logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_avg_loss.avg, epoch)
-                logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_loss.avg, epoch)
+                    logger.add_scalar("Stage {:d}/FA Loss".format(stage), FA_avg_loss(), epoch)
+                logger.add_scalar("Stage {:d}/Total Loss".format(stage), Avg_loss(), epoch)
 
             if do_train:
                 # Log learning rate for this epoch to TensorBoard
@@ -502,12 +515,12 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
 
             # Show learning rate and average losses before ending epoch
             log_string = []
-            log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss.avg))
+            log_string.append("Avg. CE: {:.4f}".format(CE_avg_loss()))
             if stage > 1:
-                log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss.avg))
+                log_string.append("Avg. MSE: {:.4f}".format(MSE_avg_loss()))
                 if stage > 2:
-                    log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss.avg))
-                log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss.avg))
+                    log_string.append("Avg. FA: {:.4f}".format(FA_avg_loss()))
+                log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss()))
 
             if not do_train:
                 log_string.append("Accuracy %: {:.2f}".format(accuracy()))
@@ -521,7 +534,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
             else:
                 print(termcolor.colored("Validation results:\n{:s}".format(log_string), 'yellow'))
 
-    return CE_avg_loss.avg, MSE_avg_loss.avg, FA_avg_loss.avg, Avg_loss.avg, miou(), accuracy()
+    return CE_avg_loss(), MSE_avg_loss(), FA_avg_loss(), Avg_loss(), miou(), accuracy()
 
 
 def _write_params_file(filename, *list_params):

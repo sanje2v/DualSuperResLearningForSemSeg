@@ -14,7 +14,7 @@
     <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>train --stage 1 --epochs 1 --description "Stage 1 training with 10 epochs" --batch-size 3 --num-workers 8 --device gpu --val-interval 1 --checkpoint-interval 1 --dataset cityscapes</CommandLineArguments>
+    <CommandLineArguments>config-train --file ./train_stage1_cmdline.json</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <TestFramework>Pytest</TestFramework>
   </PropertyGroup>

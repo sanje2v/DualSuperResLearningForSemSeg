@@ -3,25 +3,20 @@ import numpy as np
 
 
 class mIoU:
-    @staticmethod
-    def _np_batch_take(arr, mask):
-        return np.apply_along_axis(lambda x: x[mask], axis=1, arr=arr)
-
-    @staticmethod
-    def _np_batch_bincount(arr, minlength):
-        return np.apply_along_axis(lambda x: np.bincount(x, minlength=minlength), axis=1, arr=arr)
-
-
     def __init__(self, num_classes):
         self.num_classes = num_classes
         self.reset()
 
     def reset(self):
-        self.miou = []
+        self.dirty = False
+        self.miou = 0.0
+        self.ious = []
 
     def update(self, pred, target, valid_labels_mask): # NOTE: This class is designed to calculate mIoU in batches of (pred, target) pairs
         assert pred.shape == target.shape, "BUG CHECK: 'pred' and 'target' must be of the same shape of (B, H, W)."
         assert len(pred.shape) == 3, "BUG CHECK: 'target' and 'pred' must be (B, H, W) channel-order dimensions."
+
+        self.dirty = True
 
         pred = pred + 1
         target = target + 1
@@ -37,7 +32,10 @@ class mIoU:
         assert (area_inter <= area_union).all(), "BUG CHECK: Intersection area should always be less than or equal to union area."
 
         with np.errstate(divide='ignore', invalid='ignore'): # NOTE: We ignore division by zero
-            self.miou.append(np.nanmean(area_inter / area_union))
+            self.ious.append(np.nanmean(area_inter / area_union))
 
     def __call__(self):
-        return (np.nanmean(self.miou) * 100.) if self.miou else 0.    # CAUTION: We use 'nanmean' to ignore any Nan values
+        if self.dirty:
+            self.dirty = False
+            self.miou = (np.nanmean(self.ious) * 100.)  # CAUTION: We use 'nanmean' to ignore any Nan values
+        return self.miou

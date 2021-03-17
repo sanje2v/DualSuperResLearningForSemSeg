@@ -18,8 +18,8 @@ class ASPP(t.nn.Module):
         for branch_param in branch_params:
             self.branches.append(t.nn.Sequential(t.nn.Conv2d(**branch_param, bias=False),
                                                  BatchNorm2d(num_features=out_channels),
-                                                 t.nn.ReLU(),
-                                                 t.nn.Dropout(p=0.2)))
+                                                 t.nn.ReLU()))#,
+                                                 #t.nn.Dropout(p=0.2)))
         self.avg = t.nn.AdaptiveAvgPool2d(output_size=(1, 1))
 
         if init_weights:

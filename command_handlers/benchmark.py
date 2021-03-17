@@ -54,9 +54,10 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
                            leave=False,
                            bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         # Run benchmark
-        CE_avg_loss = AverageMeter('CE Avg. Loss')
+        CE_avg_loss = AverageMeter()
         miou = mIoU(num_classes=dataset['settings'].NUM_CLASSES)
         accuracy_mean = Accuracy()
+
         for ((input_scaled, _), target) in test_loader:
             SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
             SSSR_output = SSSR_output.detach().cpu()        # Bring back result to CPU memory
@@ -79,12 +80,10 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
 
             progressbar.update()
 
-    total_miou = miou() * 100.0
-    total_mean_accuracy = accuracy_mean() * 100.0
     print("-------- RESULTS --------")
-    print("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
-    print("mIoU %: {:.2f}".format(total_miou))
-    print("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
+    print("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss()))
+    print("mIoU %: {:.2f}".format(miou()))
+    print("Mean Accuracy %: {:.2f}".format(accuracy_mean()))
 
     # Save benchmark result to output directories in 'benchmark.txt'
     os.makedirs(settings.OUTPUTS_DIR, exist_ok=True)
@@ -93,6 +92,6 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
         benchmark_file.write("Benchmarking results on Cityscapes dataset's {:s} split\n\n".format(dataset['split']))
         benchmark_file.write("On: {:s}\n".format(process_start_timestamp.strftime("%c")))
         benchmark_file.write("Weights file: {:s}\n\n".format(weights))
-        benchmark_file.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss.avg))
-        benchmark_file.write("mIoU %: {:.2f}".format(total_miou))
-        benchmark_file.write("Mean Accuracy %: {:.2f}".format(total_mean_accuracy))
+        benchmark_file.write("Avg. Cross Entropy Error: {:.3f}".format(CE_avg_loss()))
+        benchmark_file.write("mIoU %: {:.2f}".format(miou()))
+        benchmark_file.write("Mean Accuracy %: {:.2f}".format(accuracy_mean()))
