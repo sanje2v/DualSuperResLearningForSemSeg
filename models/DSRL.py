@@ -53,7 +53,7 @@ class DSRL(BaseModel):
             'cls_conv': t.nn.Conv2d(in_channels=mid_channels, out_channels=out_channels, kernel_size=1, bias=True),
             # NOTE: Replaced this 'upsample4': t.nn.UpsamplingBilinear2d(size=DSRL_MODEL_OUTPUT_SIZE),
             # NOTE: Each 'ConvTranspose2d' scales 2x, so the following modules together scale by 8 times.
-            'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(scale=2.0),     # NOTE: To reduce parameters, we use upsamling here
+            'upsample16_pred': t.nn.Sequential(t.nn.UpsamplingBilinear2d(scale_factor=2.0),     # NOTE: To reduce parameters, we use upsamling here
                                                t.nn.Dropout(p=0.2),
                                                t.nn.ConvTranspose2d(in_channels=out_channels,
                                                                     out_channels=out_channels,
