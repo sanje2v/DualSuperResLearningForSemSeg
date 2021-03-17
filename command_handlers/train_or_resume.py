@@ -395,7 +395,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
         if not do_train and is_master_rank:
             # NOTE: We randomly select a batch index in validation to save input image and model's output
             #   to save in TensorBoard log.
-            RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader)//batch_size)
+            RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader))
 
         for i, ((input_image, input_org), (target, target_org)) in enumerate(data_loader):
             # SANITY CHECK: Check data doesn't have any 'NaN' values

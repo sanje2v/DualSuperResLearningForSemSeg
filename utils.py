@@ -263,7 +263,7 @@ def make_input_output_visualization(input_image, output_map, class_rgb_color, bl
     input_image = input_image.astype(np.uint8)
     output_image = np.empty_like(input_image)
     overlayed_image = np.empty_like(output_image)
-    arch_int_dtype = nb.intp    # Numba complains with warning if integer size is not same to architecture default int size
+    arch_int_dtype = nb.uintp    # Numba complains with warning if integer size is not same to architecture default int size
     class_rgb_color = dict((key, convertListToNumbaList(class_rgb_color[key], arch_int_dtype)) for key, value in class_rgb_color.items())
     class_rgb_color = convertDictToNumbaDict(class_rgb_color, arch_int_dtype, nb.types.ListType(arch_int_dtype))
 
