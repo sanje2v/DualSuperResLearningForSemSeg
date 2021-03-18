@@ -4,7 +4,7 @@
     "dataset": "cityscapes",
     "val-interval": 1,
     "checkpoint-interval": 5,
-    "batch-size": 14,
+    "batch-size": 8,
     "epochs": 60,
     "learning-rate": 0.005,
     "end-learning-rate": 0.0008,

@@ -76,7 +76,7 @@ class OverridePrintWithTQDMWriteAndLog:
             try:
                 tqdm.write(*args, **kwargs)
             except:
-                old_print(*args, ** kwargs)
+                self.old_print(*args, ** kwargs)
 
         inspect.builtins.print = new_print
         return self
