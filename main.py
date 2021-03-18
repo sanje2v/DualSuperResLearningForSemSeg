@@ -18,9 +18,6 @@ import settings
 
 # NOTE: Entry function for distributed spawned workers
 def distributed_main(device_id, args):
-    # All calls to 'print()' is to be redirected to 'tqdm.write()'
-    overrideDefaultPrintWithTQDM()
-
     # NOTE: args['distributed'] = ['MASTER_ADDR', 'MASTER_PORT', 'NODES', 'DEVICES_PER_NODE', 'BACKEND', 'INIT_METHOD', 'NODE_ID', 'DEVICE_ID', 'WORLD_SIZE', 'RANK']
     args = json.loads(args)
     args['distributed'] =\
@@ -75,14 +72,29 @@ def main(args):
 
     # According to 'args.command' call functions in 'commands' module
     if args['command'] in ['train', 'resume-train']:
-        args['is_resuming_training'] = (args['command'] == 'resume-train')
-        command_handlers.train_or_resume(**args)
+        train_logs_dir = os.path.join(args['experiment_id'], settings.LOGS_DIR.format(stage=args['stage'], mode='train'))
+        os.makedirs(train_logs_dir, exist_ok=True)
+
+        # All calls to 'print()' is to be redirected to 'tqdm.write()' and a file
+        with OverridePrintWithTQDMWriteAndLog(os.path.join(train_logs_dir, settings.STDOUT_FILE)) as stdout:
+            try:
+                args['is_resuming_training'] = (args['command'] == 'resume-train')
+                command_handlers.train_or_resume(**args)
+
+            except KeyboardInterrupt as ex:
+                stdout.write("Caught Ctrl+c to interrupt training!")
+                raise ex
+
+            except Exception as ex:
+                stdout.write("Exception caught: {}".format(str(ex)))
+                raise ex
     else:
-        # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
-        #   Hence, the following 'replace()' is required.
-        command_func_to_call = getattr(command_handlers, args['command'].replace('-', '_'), None)
-        assert command_func_to_call, "BUG CHECK: Command '{:s}' does not have any implementation under 'command_handlers' package.".format(args['command'])
-        command_func_to_call(**args)
+        with OverridePrintWithTQDMWriteAndLog():  # All calls to 'print()' is to be redirected to 'tqdm.write()'
+            # CAUTION: 'argparse' library will create variable for commandline option with '-' converted to '_'.
+            #   Hence, the following 'replace()' is required.
+            command_func_to_call = getattr(command_handlers, args['command'].replace('-', '_'), None)
+            assert command_func_to_call, "BUG CHECK: Command '{:s}' does not have any implementation under 'command_handlers' package.".format(args['command'])
+            command_func_to_call(**args)
 
 
 
@@ -95,9 +107,6 @@ def parse_cmdline_and_invoke_main(args):
         FATAL("This program needs at least TorchVision {0:d}.{1:d}.".format(*settings.MIN_TORCHVISION_VERSION))
     assert check_version(np.__version__, *settings.MIN_NUMPY_VERSION), \
         FATAL("This program needs at least NumPy {0:d}.{1:d}.".format(*settings.MIN_NUMPY_VERSION))
-
-    # All calls to 'print()' is to be redirected to 'tqdm.write()'
-    overrideDefaultPrintWithTQDM()
 
     profiler = None
     try:
@@ -214,11 +223,11 @@ def parse_cmdline_and_invoke_main(args):
                 raise Exception("CUDA is not available to use for accelerated computing!")
 
             if not isCUDAdevice(args.device):
-               if args.disable_cudnn_benchmark:
-                   raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
+                if args.disable_cudnn_benchmark:
+                    raise argparse.ArgumentTypeError("'--disable-cudnn-benchmark' is unsupported in non-CUDA devices!")
 
-               if args.mixed_precision:
-                   raise argparse.ArgumentTypeError("'--device' specified must be a CUDA device when specifying '--mixed-precision'!")
+                if args.mixed_precision:
+                    raise argparse.ArgumentTypeError("'--device' specified must be a CUDA device when specifying '--mixed-precision'!")
 
             if not args.num_workers >= 0:
                 raise argparse.ArgumentTypeError("'--num-workers' should be greater than or equal to 0!")
@@ -237,7 +246,7 @@ def parse_cmdline_and_invoke_main(args):
                     raise argparse.ArgumentTypeError("'--init-weights' must be of either '.checkpoint' or '.weights' file type!")
 
                 if not os.path.isfile(args.init_weights):
-                   raise argparse.ArgumentTypeError("Couldn't find initial weights file '{0:s}'!".format(args.init_weights))
+                    raise argparse.ArgumentTypeError("Couldn't find initial weights file '{0:s}'!".format(args.init_weights))
 
                 # CAUTION: Some functions might fail for relative paths so we convert them to absolute path
                 args.init_weights = os.path.abspath(args.init_weights)

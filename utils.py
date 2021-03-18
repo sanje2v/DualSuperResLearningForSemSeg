@@ -1,5 +1,7 @@
 import os
 import os.path
+import io
+import sys
 import argparse
 import inspect
 import platform
@@ -50,15 +52,40 @@ class timethis:
         print(self.message.format(makeSecondsPretty(time_elasped)))
 
 # Ref: https://stackoverflow.com/questions/36986929/redirect-print-command-in-python-script-through-tqdm-write
-def overrideDefaultPrintWithTQDM():
-    old_print = inspect.builtins.print
-    def new_print(*args, **kwargs):
-        # if tqdm.write raises error, use builtin print
-        try:
-            tqdm.write(*args, **kwargs)
-        except:
-            old_print(*args, ** kwargs)
-    inspect.builtins.print = new_print
+class OverridePrintWithTQDMWriteAndLog:
+    def __init__(self, log_filename = None):
+        self.logfile = open(log_filename, 'w+') if log_filename else None
+        self.old_stdout = sys.stdout
+        self.old_print = inspect.builtins.print
+
+    def write(self, text):
+        self.old_stdout.write(text)
+        if self.logfile:
+            self.logfile.write(text)
+
+    def flush(self):
+        self.old_stdout.flush()
+        if self.logfile:
+            self.logfile.flush()
+
+    def __enter__(self):
+        sys.stdout = self
+
+        def new_print(*args, **kwargs):
+            # if tqdm.write raises error, use builtin print
+            try:
+                tqdm.write(*args, **kwargs)
+            except:
+                old_print(*args, ** kwargs)
+
+        inspect.builtins.print = new_print
+        return self
+
+    def __exit__(self, type, value, traceback):
+        if self.logfile:
+            self.logfile.close()
+        sys.stdout = self.old_stdout
+        inspect.builtins.print = self.old_print
 
 class ConditionalContextManager:
     def __init__(self, expr_to_check, func_true, func_false=lambda: None):

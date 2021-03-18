@@ -44,7 +44,6 @@ DEFAULT_LOSS_WEIGHTS = [0.1, 1.0]
 
 
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
-PARAMS_FILE = 'params.txt'
 EXPERIMENTS_ROOT_DIR = 'experiments'
 WEIGHTS_ROOT_DIR = 'weights'
 WEIGHTS_DIR = os.path.join(WEIGHTS_ROOT_DIR, 'stage{stage}')
@@ -52,6 +51,8 @@ FINAL_WEIGHTS_FILE  = 'final.weights'
 CHECKPOINTS_DIR = os.path.join(WEIGHTS_DIR, 'checkpoints')
 CHECKPOINT_FILE = 'epoch{epoch}.checkpoint'
 LOGS_DIR = os.path.join('logs', 'stage{stage}', '{mode}')
+PARAMS_FILE = 'params.txt'
+STDOUT_FILE = 'stdout.txt'
 OUTPUTS_DIR = 'outputs'
 PROFILING_FILE = 'profiling.json'
 DATASETS_DIR = 'datasets'
