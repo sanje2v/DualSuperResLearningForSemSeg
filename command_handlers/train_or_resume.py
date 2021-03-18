@@ -96,7 +96,8 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                     model.load_state_dict(weights_dict['model_state_dict'], strict=False)
                 else:
                     if is_master_rank:
-                        print(CAUTION("'{:s}' weights file from previous stage was not found and network weights were initialized with Pytorch's default method.".format(prev_weights_filename)))
+                        print(CAUTION("'{:s}' weights file from previous stage was not found and network weights were initialized partially pretrained weights for ResNet101 and with Pytorch's default method.".format(prev_weights_filename)))
+                    model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
 
     if distributed:
         model = apex.parallel.DistributedDataParallel(model) if mixed_precision else t.nn.parallel.DistributedDataParallel(model, device_ids=[distributed['DEVICE_ID']])
