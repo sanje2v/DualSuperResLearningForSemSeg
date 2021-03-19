@@ -8,6 +8,6 @@
     "epochs": 250,
     "learning-rate": 0.006,
     "end-learning-rate": 0.0005,
-    "stage": 1,
-    "description": "Testing stage 1 with SSSR"
+    "stage": 2,
+    "description": "Testing stage 2 with SSSR_SISR to compare with stage 1"
 }
