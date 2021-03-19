@@ -18,20 +18,20 @@ class ASPP(t.nn.Module):
         for branch_param in branch_params:
             self.branches.append(t.nn.Sequential(t.nn.Conv2d(**branch_param, bias=False),
                                                  BatchNorm2d(num_features=out_channels),
-                                                 t.nn.ReLU()))#,
-                                                 #t.nn.Dropout(p=0.2)))
+                                                 t.nn.ReLU()))
         self.avg = t.nn.AdaptiveAvgPool2d(output_size=(1, 1))
 
         if init_weights:
             self._init_weights(BatchNorm2d)
 
+    @t.no_grad()
     def _init_weights(self, BatchNorm2d):
         for m in self.modules():
             if isinstance(m, t.nn.Conv2d):
                 t.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                m.weight.fill_(1.0)
+                m.bias.zero_()
 
     def forward(self, x:t.Tensor):
         branch_outputs = [self.branches[i](x) for i in range(4)]

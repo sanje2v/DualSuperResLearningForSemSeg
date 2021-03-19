@@ -143,14 +143,15 @@ class DSRL(BaseModel):
                     self._init_weights(BatchNorm2d, self.SSSR_feature_transformer, self.SISR_feature_transformer)
 
 
+    @t.no_grad()
     def _init_weights(self, BatchNorm2d, *modules):
         for module in modules:
             for m in module.modules():
                 if isinstance(m, (t.nn.Conv2d, t.nn.ConvTranspose2d)):
                     t.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 elif isinstance(m, BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
+                    m.weight.fill_(1.0)
+                    m.bias.zero_()
 
 
     def initialize_with_pretrained_weights(self, weights_dir, map_location=t.device('cpu')):

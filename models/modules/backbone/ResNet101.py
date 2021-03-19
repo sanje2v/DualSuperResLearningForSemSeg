@@ -41,14 +41,14 @@ class ResNet101(t.nn.Module):
         if init_weights:
             self._init_weights(BatchNorm2d)
 
-
+    @t.no_grad()
     def _init_weights(self, BatchNorm2d):
         for m in self.modules():
             if isinstance(m, t.nn.Conv2d):
                 t.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                m.weight.fill_(1.0)
+                m.bias.zero_()
             elif isinstance(m, tv.models.resnet.Bottleneck):
                 t.nn.init.constant_(m.bn3.weight, 0)
             elif isinstance(m, tv.models.resnet.BasicBlock):
