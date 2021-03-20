@@ -133,7 +133,7 @@ def parse_cmdline_and_invoke_main(args):
         train_parser.add_argument('--momentum', type=float, default=settings.DEFAULT_MOMENTUM, help="Momentum value for SGD")
         train_parser.add_argument('--weights-decay', type=float, default=settings.DEFAULT_WEIGHTS_DECAY, help="Weights decay for SGD")
         train_parser.add_argument('--poly-power', type=float, default=settings.DEFAULT_POLY_POWER, help="Power for poly learning rate strategy")
-        train_parser.add_argument('--stage', required=True, type=int, choices=DSRL.STAGES, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
+        train_parser.add_argument('--stage', required=True, type=int, choices=settings.STAGES, help="0: Train SSSR only\n1: Train SSSR+SISR\n2: Train SSSR+SISR with feature affinity")
         train_parser.add_argument('--w1', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[0], help="Weight for MSE loss")
         train_parser.add_argument('--w2', type=float, default=settings.DEFAULT_LOSS_WEIGHTS[1], help="Weight for FA loss")
         train_parser.add_argument('--freeze-batch-norm', action='store_true', help="Keep all Batch Normalization layers disabled while training")
@@ -168,12 +168,12 @@ def parse_cmdline_and_invoke_main(args):
         # Purge weights and logs
         purge_weights_logs = command_parser.add_parser('purge-weights-logs', help="Delete all training weights and logs")
         purge_weights_logs_type = purge_weights_logs.add_mutually_exclusive_group(required=True)
-        purge_weights_logs_type.add_argument('--stage', type=int, choices=DSRL.STAGES, help="Stage for which to delete weights and logs")
+        purge_weights_logs_type.add_argument('--stage', type=int, choices=settings.STAGES, help="Stage for which to delete weights and logs")
         purge_weights_logs_type.add_argument('--all', action='store_true', help="Delete weights and logs for all stages")
 
         # Print model arguments
         print_model_parser = command_parser.add_parser('print-model', help="Prints all the layers in the model with extra information for a stage")
-        print_model_parser.add_argument('--stage', required=True, type=int, choices=DSRL.STAGES, help="Stage to print layers of model for")
+        print_model_parser.add_argument('--stage', required=True, type=int, choices=settings.STAGES, help="Stage to print layers of model for")
         print_model_parser.add_argument('--dataset', type=str.casefold, choices=settings.DATASETS.keys(), default=list(settings.DATASETS.keys())[0], help="Dataset settings to use")
 
         # Purne weights arguments
@@ -343,8 +343,8 @@ def parse_cmdline_and_invoke_main(args):
         elif args.command == 'purge-weights-logs':
             answer = input('This will delete {:s} logs and weights. Continue? (y/n) '.format('all' if args.all else 'stage {:d}'.format(args.stage)))
             if answer.casefold() == 'y':
-                purge_start_stage = DSRL.STAGES[0] if args.all else args.stage
-                purge_stop_stage = DSRL.STAGES[-1] if args.all else args.stage
+                purge_start_stage = settings.STAGES[0] if args.all else args.stage
+                purge_stop_stage = settings.STAGES[-1] if args.all else args.stage
 
                 for stage in range(purge_start_stage, purge_stop_stage+1):
                     logs_dir = settings.LOGS_DIR.format(stage=stage, mode='')

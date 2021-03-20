@@ -204,18 +204,18 @@ def funcTimeIt(label, *params):
 #                                       partial(funcTimeIt, 'RandomGrayscale'),
 #                                       #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.MEAN, std=cityscapes_settings.STD)(img), seg),
 #                                       #partial(funcTimeIt, 'Normalize'),
-#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg),
+#                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg),
 #                                       partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 train_joint_transforms = JointCompose([partial(funcTimeIt, 'start'),
                                        JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                        partial(funcTimeIt, 'JointImageAndLabelTensor'),
                                        lambda img, seg: (ColorJitter2(brightness=0.4, contrast=0, saturation=0, hue=0.5)(img), seg),
                                        partial(funcTimeIt, 'ColorJitter'),
-                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg),
+                                       lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg),
                                        partial(funcTimeIt, 'DuplicateToScaledImageTransform')])
 val_joint_transforms = JointCompose([JointImageAndLabelTensor(cityscapes_settings.LABEL_MAPPING_DICT),
                                     #lambda img, seg: (tv.transforms.Normalize(mean=cityscapes_settings.MEAN, std=cityscapes_settings.STD)(img), seg),
-                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
+                                    lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg)])
 train_dataset = tv.datasets.Cityscapes(settings.CITYSCAPES_DATASET_DATA_DIR,
                                         split='train',
                                         mode='fine',

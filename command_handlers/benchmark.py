@@ -12,6 +12,7 @@ from utils import *
 import settings
 
 
+@t.no_grad()
 def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
     # Run benchmark using specified weights and display results
 
@@ -36,7 +37,7 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
 
     test_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
                                           lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=DSRL.MODEL_INPUT_SIZE)(img), seg)])
+                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg)])
     test_dataset = dataset['class'](dataset['path'],
                                     split=dataset['split'],
                                     transforms=test_joint_transforms)
@@ -47,12 +48,12 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
                                           pin_memory=isCUDAdevice(device),
                                           drop_last=False)
 
-    with t.no_grad(), tqdm(total=len(test_loader),
-                           desc='BENCHMARKING',
-                           colour='yellow',
-                           position=0,
-                           leave=False,
-                           bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
+    with tqdm(total=len(test_loader),
+              desc='BENCHMARKING',
+              colour='yellow',
+              position=0,
+              leave=False,
+              bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         # Run benchmark
         CE_avg_loss = AverageMeter()
         miou = mIoU(num_classes=dataset['settings'].NUM_CLASSES)

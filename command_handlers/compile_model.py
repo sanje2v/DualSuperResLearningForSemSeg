@@ -4,6 +4,7 @@ from tqdm.auto import tqdm
 
 from models import DSRL
 import consts
+import settings
 from utils import *
 
 
@@ -16,6 +17,6 @@ def compile_model(weights, output_file, dataset, **other_args):
 
     print(INFO("Tracing model to compile..."))
     with t.jit.optimized_execution(True):
-        trace = t.jit.trace(model, t.rand(1, consts.NUM_RGB_CHANNELS, *DSRL.MODEL_INPUT_SIZE))
+        trace = t.jit.trace(model, t.rand(1, consts.NUM_RGB_CHANNELS, *settings.MODEL_INPUT_SIZE))
     trace.save(output_file)
     print(INFO("Compiled model saved to specified file."))

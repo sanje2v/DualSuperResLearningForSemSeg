@@ -33,7 +33,7 @@ def show_augmented_inputs_targets(args):
                                      JointRandomGaussianBlur(kernel_size=3, p=0.5),
                                      JointRandomGrayscale(p=0.1),
                                      JointNormalize(mean=cityscapes_settings.MEAN, std=cityscapes_settings.STD),
-                                     JointScaledImage(new_size=DSRL.MODEL_INPUT_SIZE)])
+                                     JointScaledImage(new_size=settings.MODEL_INPUT_SIZE)])
     test_dataset = dataset_class(dataset_path,
                                  split=dataset_split,
                                  transforms=joint_transforms)

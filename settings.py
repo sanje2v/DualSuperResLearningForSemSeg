@@ -42,7 +42,7 @@ DEFAULT_WEIGHTS_DECAY = 0.0005
 DEFAULT_POLY_POWER = 0.9
 DEFAULT_LOSS_WEIGHTS = [0.1, 1.0]
 
-
+# Formats, directories and files
 PROGRESSBAR_FORMAT = '{desc}: {percentage:.1f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {postfix}'
 EXPERIMENTS_ROOT_DIR = 'experiments'
 WEIGHTS_ROOT_DIR = 'weights'
@@ -56,6 +56,11 @@ STDOUT_FILE = 'stdout.txt'
 OUTPUTS_DIR = 'outputs'
 PROFILING_FILE = 'profiling.json'
 DATASETS_DIR = 'datasets'
+
+# Model parameters
+STAGES = [1, 2, 3]
+MODEL_INPUT_SIZE = (256, 512)#(512, 512)#(512, 1024)
+MODEL_OUTPUT_SIZE = tuple(x*2 for x in MODEL_INPUT_SIZE)
 
 DATASETS =\
 {

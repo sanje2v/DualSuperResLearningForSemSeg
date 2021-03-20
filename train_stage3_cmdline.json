@@ -1,0 +1,13 @@
+{
+    "device": "gpu",
+    "num-workers": 12,
+    "dataset": "cityscapes",
+    "val-interval": 1,
+    "checkpoint-interval": 5,
+    "batch-size": 8,
+    "epochs": 250,
+    "learning-rate": 0.006,
+    "end-learning-rate": 0.0005,
+    "stage": 3,
+    "description": "Testing stage 3 with SSSR+SISR+FA to compare with stage 1 and 2"
+}
