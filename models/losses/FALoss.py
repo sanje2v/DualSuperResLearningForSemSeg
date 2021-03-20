@@ -27,7 +27,7 @@ class FALoss(t.nn.modules.loss._Loss):
         S_feature_map1 = t.flatten(S_feature_map1, start_dim=2, end_dim=3)
         S_feature_map1 = t.repeat_interleave(S_feature_map1, repeats=S_feature_map1.shape[-1], dim=2)
         S_feature_map2 = t.flatten(S_feature_map2, start_dim=2, end_dim=3)
-        S_feature_map2 = S_feature_map2.repeat(1, 1, SS_feature_map2.shape[-1])
+        S_feature_map2 = S_feature_map2.repeat(1, 1, S_feature_map2.shape[-1])
 
         return F.l1_loss(S_feature_map1,
                          S_feature_map2,
