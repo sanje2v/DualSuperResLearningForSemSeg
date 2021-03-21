@@ -12,8 +12,8 @@ class FALoss(t.nn.modules.loss._Loss):
 
 
     def __init__(self, subsample_factor:int=8, size_average=None, reduce=None, reduction='mean') -> None:
+        super().__init__(size_average=None, reduce=None, reduction=reduction)
         self.subsample_factor = subsample_factor
-        return super().__init__(size_average=None, reduce=None, reduction=reduction)
 
     def forward(self, feature_map1: t.Tensor, feature_map2: t.Tensor) -> t.Tensor:
         t.Assert(len(feature_map1.shape) == 4, "BUG CHECK: Feature map inputs to FALoss.forward() must have 4 dimensions (B, C, H, W).")

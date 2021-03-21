@@ -384,7 +384,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
     FA_avg_loss = AverageMeter()
     Avg_loss = AverageMeter()
     miou = mIoU(num_classes=dataset_settings.NUM_CLASSES)
-    accuracy = Accuracy()
+    mean_accuracy = Accuracy()
 
     with t.set_grad_enabled(mode=do_train),\
          ConditionalContextManager(is_master_rank, lambda: tqdm(total=len(data_loader),
@@ -474,7 +474,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                     pred = t.argmax(SSSR_output, dim=1).detach().cpu().numpy()
                     target = target.detach().cpu().numpy()
                     valid_labels_mask = (target != dataset_settings.IGNORE_CLASS_LABEL)    # Boolean mask
-                    accuracy.update(pred, target, valid_labels_mask)
+                    mean_accuracy.update(pred, target, valid_labels_mask)
                     miou.update(pred, target, valid_labels_mask)
 
                     # On validation mode, if current data index matches 'RANDOM_IMAGE_EXAMPLE_INDEX', save visualization to TensorBoard
@@ -503,7 +503,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                 # Log learning rate for this epoch to TensorBoard
                 logger.add_scalar("Stage {:d}/Learning rate".format(stage), scheduler.get_last_lr()[0], epoch)
             else:
-                logger.add_scalar("Stage {:d}/Accuracy %".format(stage), accuracy(), epoch)
+                logger.add_scalar("Stage {:d}/Accuracy %".format(stage), mean_accuracy(), epoch)
                 logger.add_scalar("Stage {:d}/mIoU %".format(stage), miou(), epoch)
 
             # Show learning rate and average losses before ending epoch
@@ -516,7 +516,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
                 log_string.append("Total Avg. Loss: {:.3f}".format(Avg_loss()))
 
             if not do_train:
-                log_string.append("Accuracy %: {:.2f}".format(accuracy()))
+                log_string.append("Accuracy %: {:.2f}".format(mean_accuracy()))
                 log_string.append("mIoU %: {:.2f}".format(miou()))
                 log_string.append("Best mIoU % yet is {:.2f} at epoch {:d}.".format(max(miou(), best_validation_dict['best_miou_percent']),
                                                                                     epoch if miou() > best_validation_dict['best_miou_percent'] else best_validation_dict['epoch']))
@@ -527,7 +527,7 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
             else:
                 print(termcolor.colored("Validation results:\n{:s}".format(log_string), 'yellow'))
 
-    return CE_avg_loss(), MSE_avg_loss(), FA_avg_loss(), Avg_loss(), miou(), accuracy()
+    return CE_avg_loss(), MSE_avg_loss(), FA_avg_loss(), Avg_loss(), miou(), mean_accuracy()
 
 
 def _write_params_file(filename, *list_params):

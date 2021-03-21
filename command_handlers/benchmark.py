@@ -19,16 +19,13 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
     # Time keeper
     process_start_timestamp = datetime.now()
 
-    device_obj = t.device("cuda" if isCUDAdevice(device) else device)
+    device_obj = t.device('cuda' if isCUDAdevice(device) else device)
 
-    # Create model and set to evaluation mode
-    model = DSRL(stage=1, dataset_settings=dataset['settings']).eval()
+    # Create model, set to evaluation mode and copy to device
+    model = DSRL(stage=1, dataset_settings=dataset['settings']).eval().to(device_obj)
 
     # Load specified weights file
-    model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=True)
-
-    # Copy the model into 'device_obj'
-    model = model.to(device_obj)
+    model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=False)
 
     # Prepare data from CityScapes dataset
     os.makedirs(dataset['path'], exist_ok=True)
@@ -36,8 +33,8 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
         raise Exception(FATAL("Cityscapes dataset was not found under '{:s}'. Please refer to 'README.md'.".format(dataset['path'])))
 
     test_joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                          lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                          lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg)])
+                                          JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
+                                          JointScaledImage(new_img_sizes=(settings.MODEL_INPUT_SIZE, settings.MODEL_OUTPUT_SIZE), new_seg_size=settings.MODEL_OUTPUT_SIZE)])
     test_dataset = dataset['class'](dataset['path'],
                                     split=dataset['split'],
                                     transforms=test_joint_transforms)
@@ -49,22 +46,22 @@ def benchmark(weights, dataset, device, num_workers, batch_size, **other_args):
                                           drop_last=False)
 
     with tqdm(total=len(test_loader),
-              desc='BENCHMARKING',
-              colour='yellow',
-              position=0,
-              leave=False,
-              bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
+                desc='BENCHMARKING',
+                colour='yellow',
+                position=0,
+                leave=False,
+                bar_format=settings.PROGRESSBAR_FORMAT) as progressbar:
         # Run benchmark
         CE_avg_loss = AverageMeter()
         miou = mIoU(num_classes=dataset['settings'].NUM_CLASSES)
         accuracy_mean = Accuracy()
 
-        for ((input_scaled, _), target) in test_loader:
-            SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
+        for ((input_image, _), (target, _)) in test_loader:
+            SSSR_output, _, _, _ = model.forward(input_image.to(device_obj))
             SSSR_output = SSSR_output.detach().cpu()        # Bring back result to CPU memory
 
             # Calculate Cross entropy error
-            CE_loss = t.nn.CrossEntropyLoss(ignore_index=dataset['settings'].IGNORE_CLASS_LABEL)(SSSR_output, target)
+            CE_loss = t.nn.CrossEntropyLoss(ignore_index=dataset['settings'].IGNORE_CLASS_LABEL)(SSSR_output, target.long())
             CE_avg_loss.update(CE_loss.item(), batch_size)
 
             # Prepare pred and target for metrices to process
