@@ -5,23 +5,14 @@
 ![picture](demo/stage1_output.png)
 
 # Results
-Stage 1 - 93.31 Acc, 51.78 iou - 250 epoch
--------- RESULTS --------
-Avg. Cross Entropy Error: 0.228
-mIoU %: 57.83
-Mean Accuracy %: 93.28
+On *256x512* input with *512x1024* output segmentation map, trained with *250* epochs:
 
-Stage 2 - 93.47, 53.21 iou - 248 epoch +0.16 accuracy %, +1.43 iou % than stage 1
--------- RESULTS --------
-Avg. Cross Entropy Error: 0.224
-mIoU %: 60.59
-Mean Accuracy %: 93.48
-
-Stage 3 - 93.42, 53.33 iou - 234 epoch -0.05 accuracy %, +0.09 iou % than stage 2
--------- RESULTS --------
-Avg. Cross Entropy Error: 0.227
-mIoU %: 60.96
-Mean Accuracy %: 93.34
+| Type        | Mean Accuracy % | Mean IoU %            | Cross Entropy Error | Best Epoch |
+| ------------|:---------------:|:---------------------:|:-------------------:|-----------:|
+|SSSR         |93.28            |57.83 (51.78)          |0.228                |250         |
+|SSSR+SISR    |**93.48**        |60.59 (53.21)          |**0.224**            |248         |
+|SSSR+SISR+FA |93.34            |**60.96 (53.33)**      |0.227                |**234**     |
+*NOTE: The reported mean IoU is computed using sum of intersections divided by sum of intersections (popular usage) while the ones in bracket is the mean of individually computed intersections over unions (precise definition of Mean IoU).*
 
 # Things to know
 * '.weights' file is to be used for inference and ONLY contains weights for Stage 1 layers except for 'final.weights' produced at the end of training a stage. This file contains weights for all the network layers introduced in that stage and below it.
