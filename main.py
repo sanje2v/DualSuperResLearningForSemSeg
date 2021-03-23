@@ -56,7 +56,7 @@ def main(args):
         t.backends.cudnn.benchmark = not args['disable_cudnn_benchmark']
 
     # If there is 'dataset' key specified, add dataset's class, name, split and starting index
-    if 'dataset' in args:
+    if 'dataset' in args and args['dataset']:
         if isinstance(args['dataset'], str):
             args['dataset'] = [args['dataset'], 'train', 0]
 

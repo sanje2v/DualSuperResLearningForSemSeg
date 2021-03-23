@@ -398,10 +398,10 @@ def _do_train_val(do_train, epoch, model, dataset_settings, device_obj, batch_si
             #   to save in TensorBoard log.
             RANDOM_IMAGE_EXAMPLE_INDEX = np.random.randint(0, len(data_loader))
 
-        for i, ((input_image, input_org), (target, target_org)) in enumerate(data_loader):
+        for i, ((input_image, input_org), (target, _)) in enumerate(data_loader):
             # SANITY CHECK: Check data doesn't have any 'NaN' values
             assert not (t.isnan(input_image).any().item()),\
-                FATAL("'input_scaled' contains 'NaN' values")
+                FATAL("'input_image' contains 'NaN' values")
             assert not (False if input_org is None else t.isnan(input_org).any().item()),\
                 FATAL("'input_org' contains 'NaN' values")
             assert not (t.isnan(target).any().item()),\

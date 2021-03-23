@@ -17,7 +17,11 @@ import consts
 def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_model, **other_args):
     # Testing on a single input image using given weights
 
-    device_obj = t.device("cuda" if isCUDAdevice(device) else device)
+    device_obj = t.device('cuda' if isCUDAdevice(device) else device)
+
+    if not dataset:
+        # FIXME: We need to save input normalization values with weights. Here, we default to cityscapes settings.
+        dataset = settings.DATASETS['cityscapes']
 
     if compiled_model:
         model = t.jit.load(weights)
@@ -26,7 +30,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_
         model = DSRL(stage=1, dataset_settings=dataset['settings']).eval()
 
         # Load specified weights file
-        model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=True)
+        model.load_state_dict(load_checkpoint_or_weights(weights, map_location=device_obj)['model_state_dict'], strict=False)
 
     # Copy the model into 'device_obj'
     model = model.to(device_obj)
@@ -68,8 +72,8 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_
             print(INFO("Output image saved as: {0:s}.".format(vis_image_filename)))
     else:
         joint_transforms = JointCompose([JointImageAndLabelTensor(dataset['settings'].LABEL_MAPPING_DICT),
-                                         lambda img, seg: (tv.transforms.Normalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD)(img), seg),
-                                         lambda img, seg: (DuplicateToScaledImageTransform(new_size=settings.MODEL_INPUT_SIZE)(img), seg)])
+                                         JointNormalize(mean=dataset['settings'].MEAN, std=dataset['settings'].STD),
+                                         JointScaledImage(new_img_sizes=(settings.MODEL_INPUT_SIZE, settings.MODEL_OUTPUT_SIZE), new_seg_size=settings.MODEL_OUTPUT_SIZE)])
         test_dataset = dataset['class'](dataset['path'],
                                         split=dataset['split'],
                                         transforms=joint_transforms)
@@ -82,14 +86,14 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_
 
 
         print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
-        for i, ((input_scaled, input_org), target) in enumerate(tqdm(test_loader,
-                                                                        desc='TESTING',
-                                                                        colour='yellow',
-                                                                        position=0,
-                                                                        leave=False)):
+        for i, ((input_image, input_org), (target, _)) in enumerate(tqdm(test_loader,
+                                                                          desc='TESTING',
+                                                                          colour='yellow',
+                                                                          position=0,
+                                                                          leave=False)):
             if i >= dataset['starting_index']:
                 with timethis(INFO("Inference required {:}.")):
-                    SSSR_output, _, _, _ = model.forward(input_scaled.to(device_obj))
+                    SSSR_output, _, _, _ = model.forward(input_image.to(device_obj))
 
                 input_image = input_org.detach().cpu().numpy()[0]
                 input_image = np.array(dataset['settings'].STD).reshape(consts.NUM_RGB_CHANNELS, 1, 1) * input_image +\
