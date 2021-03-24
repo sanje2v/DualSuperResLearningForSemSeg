@@ -59,7 +59,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
             print(CAUTION("Please make sure system is NOT configured to sleep on idle! Sleep mode will pause training."))
 
     # Create model according to stage and optimizer
-    model = DSRL(stage, dataset['settings']).to(device_obj)
+    model = DSRL(stage, dataset['settings'])
     optimizer = t.optim.SGD(model.parameters(),
                             lr=learning_rate,
                             momentum=momentum,
@@ -98,6 +98,9 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
                     if is_master_rank:
                         print(CAUTION("'{:s}' weights file from previous stage was not found and network weights were initialized partially pretrained weights for ResNet101 and with Pytorch's default method.".format(prev_weights_filename)))
                     model.initialize_with_pretrained_weights(settings.WEIGHTS_ROOT_DIR)
+
+    # Move model to device
+    model = model.to(device_obj)
 
     if distributed:
         model = apex.parallel.DistributedDataParallel(model) if mixed_precision else t.nn.parallel.DistributedDataParallel(model, device_ids=[distributed['DEVICE_ID']])
@@ -215,7 +218,7 @@ def train_or_resume(is_resuming_training, device, distributed, mixed_precision, 
 
             training_epoch_timetaken_list = []
 
-        # Let's free as much unreferenced memory as possible before starting training
+        # Lets free as much unreferenced memory as possible before starting training
         gc.collect()
         if isCUDAdevice(device):
             t.cuda.empty_cache()
