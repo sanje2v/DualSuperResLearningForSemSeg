@@ -33,7 +33,7 @@ def show_augmented_inputs_targets(args):
                                      JointRandomGaussianBlur(kernel_size=3, p=0.5),
                                      JointRandomGrayscale(p=0.1),
                                      JointNormalize(mean=cityscapes_settings.MEAN, std=cityscapes_settings.STD),
-                                     JointScaledImage(new_size=settings.MODEL_INPUT_SIZE)])
+                                     JointScaledImage(new_img_sizes=(settings.MODEL_INPUT_SIZE, settings.MODEL_OUTPUT_SIZE), new_seg_size=settings.MODEL_OUTPUT_SIZE)])
     test_dataset = dataset_class(dataset_path,
                                  split=dataset_split,
                                  transforms=joint_transforms)
@@ -46,7 +46,7 @@ def show_augmented_inputs_targets(args):
 
     print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
     try:
-        for i, ((_, input_image), target_map) in enumerate(test_loader):
+        for i, ((_, input_image), (target_map, _)) in enumerate(test_loader):
             print("Creating visualization...")
             if input_image.shape[-2:] != target_map.shape[-2:]:
                 input_image = F.interpolate(input_image, size=target_map.shape[-2:], mode='bilinear', align_corners=True)

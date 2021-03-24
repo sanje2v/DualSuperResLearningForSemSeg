@@ -86,7 +86,7 @@ def test(image_file, images_dir, dataset, output_dir, weights, device, compiled_
 
 
         print(INFO("Press ENTER to show next pair of input and output. Use CTRL+c to quit."))
-        for i, ((input_image, input_org), (target, _)) in enumerate(tqdm(test_loader,
+        for i, ((_, input_org), (target, _)) in enumerate(tqdm(test_loader,
                                                                           desc='TESTING',
                                                                           colour='yellow',
                                                                           position=0,
