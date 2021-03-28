@@ -1,6 +1,5 @@
 import os
 import os.path
-import io
 import sys
 import argparse
 import inspect

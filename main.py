@@ -10,7 +10,6 @@ import numpy as np
 import torch as t
 import torchvision as tv
 
-from models import DSRL
 import command_handlers
 from utils import *
 import settings
