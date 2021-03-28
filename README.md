@@ -1,5 +1,5 @@
 # Implementation of 'Dual Super Resolution Learning For Semantic Segmentation', CVPR 2020 paper
-[This paper](http://openaccess.thecvf.com/content_CVPR_2020/html/Wang_Dual_Super-Resolution_Learning_for_Semantic_Segmentation_CVPR_2020_paper.html) combines Super-Resolution and Feature Affinity learning to improve traditional semantic segmentation model.
+This is an implemention of [a CVPR 2020 paper](http://openaccess.thecvf.com/content_CVPR_2020/html/Wang_Dual_Super-Resolution_Learning_for_Semantic_Segmentation_CVPR_2020_paper.html) that combines Super-Resolution and Feature Affinity learning to improve traditional semantic segmentation model.
 
 
 ![picture](demo/stage1_output.png)
@@ -38,7 +38,7 @@ The following software versions were used for testing the code in this repo. Oth
 # Getting started
 Before training or benchmarking, please download 'gtFine.zip' and 'leftImg8bit.zip' for [**Cityscapes dataset**](https://www.cityscapes-dataset.com/) and unzip them under './datasets/Cityscapes/data'.
 
-All commands are invoked via `main.py` script. For instance to train, you would use something like `python main.py --train [...]`. Use `python main.py --help` to view all supported commands.
+All commands are invoked via `main.py` script. For instance to train, you would use something like `python main.py <command> --<options> --[...]`. Use `python main.py --help` to view all supported commands and `python main.py <command> --help` to view all the options for the command.
 
 
 # Commands
@@ -50,7 +50,7 @@ Perform training on the '*train*' split of **Cityscapes dataset**.
 `python main.py train --stage 1 --description "Stage 1 training" --epochs 200 --batch-size 6 --device gpu --checkpoint-history 40 --num-workers 4 --val-interval 5` 
 
 ### With JSON config file
-Commandlines can be put in a JSON file to avoid have to retype/remember them. An example are the JSON files in the root of this repo.
+Command lines can, alternatively, be put in a JSON file to avoid having to retype/remember them. Example JSON files are in the root of this repo.
 
 *Example usage:*
 `python main.py config-train --file ./train_stage1_cmdline.json`
